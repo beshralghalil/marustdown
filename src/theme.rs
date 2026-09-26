@@ -236,7 +236,7 @@ mod tests {
     fn resolves_palette() {
         let t = test_theme();
         assert_eq!(t.paint(0), None);
-        assert_eq!(t.paint(t.styles.h1.fg), Some(Paint::Rgb(0x89, 0xb4, 0xfa)));
+        assert_eq!(t.paint(t.styles.h1.fg), Some(Paint::Indexed(4)));
         assert_eq!(parse_hex("#fff"), Some(Paint::Rgb(255, 255, 255)));
         assert_eq!(parse_hex("#12345"), None);
     }

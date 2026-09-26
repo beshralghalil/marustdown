@@ -7,7 +7,7 @@
 # Color preset: "dark", "light", "ansi" (follows your terminal's own 16 colors),
 # or the name of a file in $XDG_CONFIG_HOME/marustdown/themes/<name>.toml that
 # holds a [colors] table (and optionally anything else from this file).
-theme = "dark"
+theme = "ansi"
 
 [layout]
 width = 90           # maximum content width in columns

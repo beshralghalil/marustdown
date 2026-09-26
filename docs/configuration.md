@@ -27,14 +27,14 @@ toggle = ["space"]
 ## Theme
 
 ```toml
-theme = "dark"
+theme = "ansi"
 ```
 
 | Value | Colors |
 |---|---|
-| `dark` | Catppuccin Mocha (default) |
+| `ansi` | Your terminal's 16 colors (default) |
+| `dark` | Catppuccin Mocha |
 | `light` | Catppuccin Latte |
-| `ansi` | Your terminal's 16 colors |
 | `<name>` | `~/.config/marustdown/themes/<name>.toml` |
 
 A theme file holds a `[colors]` table and may override any other table.
