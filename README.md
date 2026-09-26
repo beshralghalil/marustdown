@@ -228,3 +228,7 @@ The design is in [plan.md](plan.md). In short, `source` memory-maps the input, `
 walks the pulldown-cmark events into a `Document` (flat text, style runs and line ends,
 with no escape codes), and `render` and `pager` turn it into terminal output without
 knowing anything about markdown.
+
+## License
+
+[MIT](LICENSE)

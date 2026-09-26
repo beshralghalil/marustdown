@@ -3,6 +3,7 @@ name = "marustdown"
 version = "0.1.0"
 edition = "2024"
 description = "A fast, configurable terminal markdown viewer"
+license = "MIT"
 
 [[bin]]
 name = "mar"
