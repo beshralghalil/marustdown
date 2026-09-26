@@ -1,5 +1,22 @@
 # Contributing
 
+## Git hooks
+
+Hooks in `.pre-commit-config.yaml` run `cargo fmt` and basic file checks (trailing
+whitespace, final newlines, TOML/YAML syntax, merge markers, large files) on every commit.
+Set them up once per clone with [prek](https://github.com/j178/prek):
+
+```sh
+cargo install --locked prek
+prek install
+```
+
+The Python [pre-commit](https://pre-commit.com) tool reads the same file, so
+`pre-commit install` works too.
+
+When a hook changes a file, the commit stops. Review the change, `git add` it and commit
+again. `prek run --all-files` runs every hook on the whole repository.
+
 ## Checks
 
 CI runs these on every push and pull request:
