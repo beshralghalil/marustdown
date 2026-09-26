@@ -3,6 +3,7 @@ mod doc;
 mod highlight;
 mod keys;
 mod layout;
+mod links;
 mod pager;
 mod render;
 mod search;

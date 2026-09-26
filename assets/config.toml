@@ -70,6 +70,8 @@ cursor = { bg = "highlight" }
 status = { fg = "subtle", bg = "surface" }
 search = { fg = "yellow", bold = true, reverse = true }
 outline_level = { fg = "muted" }
+hint = { fg = "orange", bold = true, reverse = true }   # link tags shown by the `hints` key
+link_selected = { fg = "accent", bold = true, reverse = true }
 
 # Glyphs use single-column characters unless noted. An empty string hides the element.
 # The defaults use Nerd Font icons for alerts; set `icons = false` for plain ASCII.
@@ -103,7 +105,7 @@ separator = " │ "
 [keys]
 down = ["j", "down"]
 up = ["k", "up"]
-page_down = ["space", "f", "pagedown"]
+page_down = ["space", "pagedown"]
 page_up = ["b", "pageup"]
 half_down = ["d", "ctrl-d"]
 half_up = ["u", "ctrl-u"]
@@ -114,7 +116,12 @@ prev_heading = ["[["]
 search = ["/"]
 next_match = ["n"]
 prev_match = ["N"]
-toggle = ["x", "enter"]
+toggle = ["x"]
+next_link = ["tab"]
+prev_link = ["backtab"]
+open = ["enter"]         # the selected link, or the task under the cursor
+hints = ["f"]            # tag visible links; type a tag to open it, in uppercase to copy its URL
+back = ["backspace"]     # return to the previous file after following a link
 copy = ["y"]
 outline = ["o"]
 edit = ["e"]

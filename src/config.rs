@@ -158,6 +158,8 @@ fields!(Styles {
     status,
     search,
     outline_level,
+    hint,
+    link_selected,
 });
 
 fields!(KeyTable {
@@ -175,6 +177,11 @@ fields!(KeyTable {
     next_match,
     prev_match,
     toggle,
+    next_link,
+    prev_link,
+    open,
+    hints,
+    back,
     copy,
     outline,
     edit,

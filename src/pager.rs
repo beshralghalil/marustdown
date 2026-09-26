@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::Write as _;
 use std::fs::OpenOptions;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -12,7 +13,8 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::doc::Document;
 use crate::keys::{Action, Key, Keymap};
-use crate::render;
+use crate::links::{self, Target};
+use crate::render::{self, Decor};
 use crate::search::Matcher;
 use crate::source::Source;
 use crate::theme::{Style, Theme};
@@ -21,9 +23,10 @@ use crate::wrap;
 const ENTER: &str = "\x1b[?1049h\x1b[?25l\x1b[?7l"; // alt screen, hide cursor, no autowrap
 const LEAVE: &str = "\x1b[?7h\x1b[?25h\x1b[?1049l";
 
-const HINTS: [(Action, &str); 7] = [
+const HINTS: [(Action, &str); 8] = [
     (Action::Search, "search"),
     (Action::NextMatch, "next"),
+    (Action::Hints, "links"),
     (Action::Toggle, "toggle"),
     (Action::Outline, "outline"),
     (Action::Edit, "edit"),
@@ -92,6 +95,34 @@ enum Mode {
     Normal,
     Search(String),
     Outline(Outline),
+    Hints(Hints),
+}
+
+struct Hints {
+    typed: String,
+    targets: Vec<Hint>,
+}
+
+struct Hint {
+    line: usize,
+    at: usize,
+    id: u16,
+    label: String,
+}
+
+#[derive(Clone, Copy)]
+struct Selection {
+    line: usize,
+    start: usize,
+    end: usize,
+    id: u16,
+}
+
+/// A file left by following a link, restored by `back`.
+struct Page {
+    source: Source,
+    path: Option<PathBuf>,
+    offset: usize,
 }
 
 struct Outline {
@@ -113,6 +144,8 @@ struct Pager<'a> {
     top: usize,
     cursor: usize,
     matcher: Option<Matcher>,
+    selected: Option<Selection>,
+    history: Vec<Page>,
     mode: Mode,
     message: Option<String>,
     hints: String,
@@ -147,6 +180,8 @@ impl<'a> Pager<'a> {
             top: 0,
             cursor: 0,
             matcher: None,
+            selected: None,
+            history: Vec::new(),
             mode: Mode::Normal,
             message: None,
             hints,
@@ -161,6 +196,7 @@ impl<'a> Pager<'a> {
     fn relayout(&mut self) {
         (self.width, self.margin) = self.theme.layout.fit(self.size.0 as usize);
         self.doc.layout(self.source.text(), self.width, self.theme);
+        self.selected = None;
         self.cursor = self.cursor.min(self.doc.len().saturating_sub(1));
         self.follow();
     }
@@ -247,6 +283,10 @@ impl<'a> Pager<'a> {
                 self.outline_key(key, ctrl_c);
                 false
             }
+            Mode::Hints(_) => {
+                self.hint_key(key, ctrl_c);
+                false
+            }
             Mode::Normal if ctrl_c => true,
             Mode::Normal => {
                 self.message = None;
@@ -258,6 +298,9 @@ impl<'a> Pager<'a> {
     }
 
     fn act(&mut self, action: Action) -> bool {
+        if !matches!(action, Action::NextLink | Action::PrevLink | Action::Open) {
+            self.selected = None;
+        }
         let rows = self.rows();
         let move_by = |p: &mut Self, delta: isize| {
             p.cursor = p.cursor.saturating_add_signed(delta).min(p.last());
@@ -301,6 +344,14 @@ impl<'a> Pager<'a> {
             Action::NextMatch => self.search_next(true),
             Action::PrevMatch => self.search_next(false),
             Action::Toggle => self.toggle(),
+            Action::NextLink => self.cycle_link(true),
+            Action::PrevLink => self.cycle_link(false),
+            Action::Open => match self.selected {
+                Some(sel) => self.follow_link(sel.id, false),
+                None => self.toggle(),
+            },
+            Action::Hints => self.start_hints(),
+            Action::Back => self.back(),
             Action::Copy => self.copy(),
             Action::Outline => self.open_outline(),
             Action::Edit => self.edit(),
@@ -430,6 +481,173 @@ impl<'a> Pager<'a> {
         self.follow();
     }
 
+    /// Selects the next (or previous) link after the current selection or cursor,
+    /// skipping the wrapped tails of links, and wrapping around the document.
+    fn cycle_link(&mut self, forward: bool) {
+        let n = self.doc.len();
+        if n == 0 {
+            return;
+        }
+        let (from, after) = match self.selected {
+            Some(sel) => (sel.line, Some(sel.start)),
+            None => (self.cursor, None),
+        };
+        for step in 0..=n {
+            let line = if forward {
+                (from + step) % n
+            } else {
+                (from + n - step) % n
+            };
+            let doc = &self.doc;
+            let spans = doc
+                .link_spans(line)
+                .enumerate()
+                .filter(|&(k, (start, _, id))| {
+                    let fresh = k > 0 || !doc.continues_link(line, id);
+                    let beyond = step > 0
+                        || after.is_none_or(|a| if forward { start > a } else { start < a });
+                    fresh && beyond
+                });
+            let pick = if forward {
+                spans.map(|(_, s)| s).next()
+            } else {
+                spans.map(|(_, s)| s).last()
+            };
+            if let Some((start, end, id)) = pick {
+                self.selected = Some(Selection {
+                    line,
+                    start,
+                    end,
+                    id,
+                });
+                self.cursor = line;
+                self.follow();
+                return;
+            }
+        }
+        self.say("no links");
+    }
+
+    fn start_hints(&mut self) {
+        let mut spots: Vec<(usize, usize, u16)> = Vec::new();
+        for line in self.top..(self.top + self.rows()).min(self.doc.len()) {
+            for (at, _, id) in self.doc.link_spans(line) {
+                if !spots.iter().any(|s| s.2 == id) {
+                    spots.push((line, at, id));
+                }
+            }
+        }
+        if spots.is_empty() {
+            return self.say("no links on screen");
+        }
+        let labels = links::hint_labels(spots.len());
+        let targets = spots
+            .into_iter()
+            .zip(labels)
+            .map(|((line, at, id), label)| Hint {
+                line,
+                at,
+                id,
+                label,
+            })
+            .collect();
+        self.mode = Mode::Hints(Hints {
+            typed: String::new(),
+            targets,
+        });
+    }
+
+    /// Narrows the hint tags; opens the link once one is left, or copies its URL
+    /// when the tag was typed in uppercase.
+    fn hint_key(&mut self, key: KeyEvent, ctrl_c: bool) {
+        let Mode::Hints(mut hints) = mem::replace(&mut self.mode, Mode::Normal) else {
+            return;
+        };
+        match key.code {
+            _ if ctrl_c => return,
+            KeyCode::Backspace if hints.typed.pop().is_some() => {}
+            KeyCode::Char(c) if c.is_ascii_alphabetic() => hints.typed.push(c),
+            _ => return,
+        }
+        let tag = hints.typed.to_ascii_lowercase();
+        let copy = hints.typed.chars().any(|c| c.is_ascii_uppercase());
+        let mut matching = hints.targets.iter().filter(|t| t.label.starts_with(&tag));
+        let first = matching.next().map(|t| t.id);
+        match (first, matching.next().is_some()) {
+            (None, _) => self.say("no such link"),
+            (Some(id), false) => self.follow_link(id, copy),
+            _ => self.mode = Mode::Hints(hints),
+        }
+    }
+
+    fn follow_link(&mut self, id: u16, copy: bool) {
+        let Some(url) = (id as usize)
+            .checked_sub(1)
+            .and_then(|i| self.doc.links.get(i))
+            .cloned()
+        else {
+            return;
+        };
+        if copy {
+            render::clipboard(&url, &mut self.osc);
+            return self.say(format!("copied {url}"));
+        }
+        let base = self.path.as_deref().and_then(Path::parent);
+        match links::classify(&url, base) {
+            Target::Anchor(anchor) => self.goto_anchor(anchor),
+            Target::Local { path, anchor } if links::is_markdown(&path) => self.visit(path, anchor),
+            Target::Local { path, .. } => self.external(path.as_os_str()),
+            Target::External(url) => self.external(OsStr::new(url)),
+        }
+    }
+
+    fn goto_anchor(&mut self, anchor: &str) {
+        match self.doc.find_anchor(anchor) {
+            Some(h) => self.jump(h.line as usize),
+            None => self.say(format!("no heading #{anchor}")),
+        }
+    }
+
+    fn external(&mut self, target: &OsStr) {
+        match links::open_external(target) {
+            Ok(()) => self.say(format!("opened {}", target.to_string_lossy())),
+            Err(e) => self.say(format!("opener: {e}")),
+        }
+    }
+
+    /// Opens a linked markdown file in place, remembering the current one for `back`.
+    fn visit(&mut self, path: PathBuf, anchor: Option<&str>) {
+        let source = match Source::open(&path) {
+            Ok(source) => source,
+            Err(e) => return self.say(format!("{}: {e}", path.display())),
+        };
+        let offset = self.doc.source_offset(self.cursor);
+        let message = path.display().to_string();
+        let source = mem::replace(&mut self.source, source);
+        let path = self.path.replace(path);
+        self.history.push(Page {
+            source,
+            path,
+            offset,
+        });
+        (self.cursor, self.top) = (0, 0);
+        self.relayout();
+        match anchor {
+            Some(anchor) => self.goto_anchor(anchor),
+            None => self.say(message),
+        }
+    }
+
+    fn back(&mut self) {
+        let Some(page) = self.history.pop() else {
+            return self.say("no previous file");
+        };
+        self.source = page.source;
+        self.path = page.path;
+        self.relayout();
+        self.jump(self.doc.line_at_offset(page.offset));
+    }
+
     fn open_outline(&mut self) {
         if self.doc.headings.is_empty() {
             return self.say("no headings");
@@ -520,17 +738,39 @@ impl<'a> Pager<'a> {
 
     fn draw_lines(&self, buf: &mut String) {
         let (t, cursor_style) = (self.theme, self.theme.styles.cursor);
+        let mut labels = Vec::new();
+        let hints = match &self.mode {
+            Mode::Hints(h) => Some((h, h.typed.to_ascii_lowercase())),
+            _ => None,
+        };
         for row in 0..self.rows() {
             let _ = write!(buf, "\x1b[{};1H", row + 1);
             let i = self.top + row;
             if i < self.doc.len() {
-                let under = if i == self.cursor {
-                    cursor_style
-                } else {
-                    Style::default()
+                labels.clear();
+                if let Some((h, tag)) = &hints {
+                    labels.extend(
+                        h.targets
+                            .iter()
+                            .filter(|t| t.line == i && t.label.starts_with(tag.as_str()))
+                            .map(|t| (t.at, &t.label[tag.len()..])),
+                    );
+                }
+                let decor = Decor {
+                    under: if i == self.cursor {
+                        cursor_style
+                    } else {
+                        Style::default()
+                    },
+                    search: self.matcher.as_ref(),
+                    select: self
+                        .selected
+                        .filter(|s| s.line == i)
+                        .map(|s| (s.start, s.end)),
+                    labels: &labels,
                 };
                 render::pad(buf, self.margin);
-                render::line(&self.doc, i, t, self.matcher.as_ref(), under, buf);
+                render::line(&self.doc, i, t, &decor, buf);
                 if i == self.cursor {
                     let used = self.doc.line(i).0.width();
                     render::blank(t, cursor_style, self.width.saturating_sub(used), buf);
@@ -590,6 +830,7 @@ impl<'a> Pager<'a> {
         let prompt = match &self.mode {
             Mode::Search(q) => Some(("/", q.as_str())),
             Mode::Outline(o) => Some(("outline: ", o.query.as_str())),
+            Mode::Hints(h) => Some(("link (uppercase copies): ", h.typed.as_str())),
             Mode::Normal => None,
         };
         match prompt {

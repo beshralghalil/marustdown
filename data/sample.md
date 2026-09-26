@@ -3,7 +3,8 @@
 This document uses every markdown construct marustdown renders. Open it with
 `mar data/sample.md` and try the keys as you read: `j`/`k` move the cursor, `]]` and
 `[[` jump between headings, `o` opens the outline, `/` searches, `x` checks off a task,
-`y` copies a code block, and `e` opens this file in your editor.
+`y` copies a code block, `f` tags the links on screen so you can open one by typing its
+tag, and `e` opens this file in your editor.
 
 ---
 
@@ -65,8 +66,16 @@ Pneumonoultramicroscopicsilicovolcanoconiosis_and_a_few_more_characters_to_make_
 [spec]: https://spec.commonmark.org/
 [GFM]: https://github.github.com/gfm/
 
+Follow links from the keyboard:
+
+- Press `f` and every link on screen gets a short tag. Type a tag to open that link, or
+  type it in uppercase to copy the URL instead.
+- `Tab` and `Shift-Tab` step through the links, and `Enter` opens the selected one.
+- A `#section` link jumps within this page. A link to another `.md` file opens it in
+  the viewer, and `Backspace` brings you back here. Other links open in your browser.
+
 In terminals that support OSC 8 (kitty, WezTerm, iTerm2, GNOME Terminal and others),
-links are clickable.
+links are also clickable with the mouse.
 
 ## Images
 

@@ -16,28 +16,44 @@ const ATTRS: [(u8, &str); 6] = [
 const OSC8_CLOSE: &str = "\x1b]8;;\x1b\\";
 const CHUNK: usize = 1 << 16;
 
-/// Writes line `i` as ANSI text. `under` sits beneath every run (the cursor line),
-/// and search hits are split out of their runs here, never stored.
-pub fn line(
-    doc: &Document,
-    i: usize,
-    theme: &Theme,
-    search: Option<&Matcher>,
-    under: Style,
-    out: &mut String,
-) {
+/// Per-frame decorations layered over a line; none of them are stored in the document.
+#[derive(Default)]
+pub struct Decor<'a> {
+    pub under: Style,                   // beneath every run (the cursor line)
+    pub search: Option<&'a Matcher>,    // hits split out of their runs
+    pub select: Option<(usize, usize)>, // byte range of the selected link
+    pub labels: &'a [(usize, &'a str)], // hint tags inserted before these offsets, sorted
+}
+
+/// Writes line `i` as ANSI text.
+pub fn line(doc: &Document, i: usize, theme: &Theme, decor: &Decor, out: &mut String) {
     let (text, runs) = doc.line(i);
+    let s = &theme.styles;
     let mut pen = Pen::new(theme, &doc.links, out);
-    let mut hits = search.into_iter().flat_map(|m| m.matches(text)).peekable();
+    let mut hits = decor
+        .search
+        .into_iter()
+        .flat_map(|m| m.matches(text))
+        .peekable();
+    let mut labels = decor.labels.iter().peekable();
     for (k, run) in runs.iter().enumerate() {
+        let at = run.at as usize;
         let end = runs.get(k + 1).map_or(text.len(), |n| n.at as usize);
-        let style = under.over(run.style);
-        let mut pos = run.at as usize;
+        while let Some(&(pos, label)) = labels.next_if(|l| l.0 <= at) {
+            if pos == at {
+                pen.put(label, decor.under.over(s.hint));
+            }
+        }
+        let mut style = decor.under.over(run.style);
+        if decor.select.is_some_and(|(a, b)| (a..b).contains(&at)) {
+            style = style.over(s.link_selected);
+        }
+        let mut pos = at;
         while pos < end {
             while hits.next_if(|&(_, e)| e <= pos).is_some() {}
             let (stop, style) = match hits.peek() {
-                Some(&(s, e)) if s <= pos => (e.min(end), style.over(theme.styles.search)),
-                Some(&(s, _)) if s < end => (s, style),
+                Some(&(s0, e)) if s0 <= pos => (e.min(end), style.over(s.search)),
+                Some(&(s0, _)) if s0 < end => (s0, style),
                 _ => (end, style),
             };
             pen.put(&text[pos..stop], style);
@@ -65,7 +81,7 @@ pub fn cat(
     for i in 0..doc.len() {
         if !doc.line(i).0.is_empty() {
             pad(&mut buf, margin);
-            line(doc, i, theme, None, Style::default(), &mut buf);
+            line(doc, i, theme, &Decor::default(), &mut buf);
         }
         buf.push('\n');
         if buf.len() >= CHUNK {
@@ -262,7 +278,16 @@ mod tests {
         let mut doc = Document::new();
         doc.layout(src, 80, &theme);
         let mut out = String::new();
-        line(&doc, 0, &theme, search, Style::default(), &mut out);
+        line(
+            &doc,
+            0,
+            &theme,
+            &Decor {
+                search,
+                ..Decor::default()
+            },
+            &mut out,
+        );
         out
     }
 
@@ -289,6 +314,39 @@ mod tests {
         let out = render("abcabc", Some(&Matcher::new("bc")));
         assert_eq!(out.matches("\x1b[1;7;").count(), 2);
         assert!(out.starts_with('a'));
+    }
+
+    #[test]
+    fn labels_and_selection() {
+        let theme = test_theme();
+        let mut doc = Document::new();
+        doc.layout("go [here](u) now", 80, &theme);
+        let (start, end, _) = doc.link_spans(0).next().unwrap();
+        let mut out = String::new();
+        let decor = Decor {
+            select: Some((start, end)),
+            labels: &[(start, "a")],
+            ..Decor::default()
+        };
+        line(&doc, 0, &theme, &decor, &mut out);
+        let plain: String = strip(&out);
+        assert_eq!(plain, "go ahere↗ now");
+        assert!(out.contains("\x1b[1;7;"));
+    }
+
+    fn strip(s: &str) -> String {
+        let mut out = String::new();
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            match c {
+                '\x1b' if chars.peek() == Some(&'[') => {
+                    while chars.next().is_some_and(|c| c != 'm') {}
+                }
+                '\x1b' => while chars.next().is_some_and(|c| c != '\\') {},
+                c => out.push(c),
+            }
+        }
+        out
     }
 
     #[test]

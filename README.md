@@ -37,6 +37,10 @@ in a full-screen pager, and every color, glyph and key can be changed in one TOM
 
 - **Pager** with a cursor line, search, heading jumps and a breadcrumb of the current section.
 - **Task lists you can check off.** Toggling a task writes `[ ]` ↔ `[x]` back to the file.
+- **Keyboard link following.** `f` tags every visible link, and typing a tag opens it
+  (in uppercase, it copies the URL instead). Tab and Shift-Tab step through links, and Enter
+  opens the selected one. `#anchors` jump within the page, linked `.md` files open in
+  the viewer with a back history, and everything else goes to `xdg-open`.
 - **Outline picker.** Filter the headings by typing, then jump to one.
 - **Edit in `$EDITOR`** at the cursor's source line, and see the result when you return.
 - **Copy code blocks** to the system clipboard with OSC 52, which also works over SSH.
@@ -82,12 +86,16 @@ mar doc.md | less -R     # piping switches to cat mode automatically
 | Key | Action |
 |---|---|
 | `j` `k` / `↓` `↑` | Move the cursor |
-| `Space` `f` / `b`, `PgDn` / `PgUp` | Page down / up |
+| `Space` / `b`, `PgDn` / `PgUp` | Page down / up |
 | `d` / `u` | Half page down / up |
 | `g` / `G` | Top / bottom |
 | `]]` / `[[` | Next / previous heading |
 | `/` then `Enter`, `n` / `N` | Search (smart case), next / previous match |
-| `x` or `Enter` | Toggle the task under the cursor (saved to the file) |
+| `f` then a tag | Open that link; type the tag in uppercase to copy its URL |
+| `Tab` / `Shift-Tab` | Select the next / previous link |
+| `Enter` | Open the selected link, or toggle the task under the cursor |
+| `Backspace` | Go back to the previous file after following a link |
+| `x` | Toggle the task under the cursor (saved to the file) |
 | `o` | Outline: type to filter, `↑` `↓` to pick, `Enter` to jump, `Esc` to close |
 | `e` | Open `$VISUAL` / `$EDITOR` at the cursor line, then reload |
 | `y` | Copy the code block at the cursor |
@@ -172,7 +180,7 @@ Each entry in `[styles]` is an inline table that accepts `fg`, `bg`, `bold`, `di
 | Code blocks | `code_block`, `code_border`, `code_label`, `line_number` |
 | Syntax | `syntax_keyword`, `syntax_string`, `syntax_number`, `syntax_comment`, `syntax_type` |
 | Tables | `table_border`, `table_header` |
-| Pager | `cursor`, `status`, `search`, `outline_level` |
+| Pager | `cursor`, `status`, `search`, `outline_level`, `hint`, `link_selected` |
 
 ### Glyphs
 
@@ -208,10 +216,13 @@ Each action in `[keys]` takes a list of keys. A key is one of:
 
 The actions are `down`, `up`, `page_down`, `page_up`, `half_down`, `half_up`, `top`,
 `bottom`, `next_heading`, `prev_heading`, `search`, `next_match`, `prev_match`, `toggle`,
-`copy`, `outline`, `edit` and `quit`. The status bar hints update to match your bindings.
+`next_link`, `prev_link`, `open`, `hints`, `back`, `copy`, `outline`, `edit` and `quit`. The status bar hints update to match your bindings.
 
 ## Notes
 
+- Links to local markdown files are resolved against the current file's directory, and
+  a `#fragment` jumps to the matching heading using GitHub's anchor rules. External links
+  open with `xdg-open` (`open` on macOS).
 - Copying needs a terminal that supports OSC 52. Under tmux, also set `set -g set-clipboard on`.
 - Toggling a task checks that the file still has a task box at that spot before writing,
   so a file edited behind the viewer's back won't be corrupted.

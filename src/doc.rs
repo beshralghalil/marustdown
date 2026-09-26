@@ -20,7 +20,8 @@ pub struct Heading {
     pub line: u32,
     pub level: u8,
     pub parent: Option<u32>,
-    pub(crate) title_at: u16,
+    title_at: u16,
+    slug_end: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -50,6 +51,7 @@ pub struct Document {
     pub tasks: Vec<Task>,
     anchors: Vec<(u32, usize)>, // (line, source offset) at each block start
     code: String,
+    slugs: String,
 }
 
 impl Document {
@@ -72,6 +74,42 @@ impl Document {
 
     pub fn title(&self, h: &Heading) -> &str {
         &self.line(h.line as usize).0[h.title_at as usize..]
+    }
+
+    /// The heading a `#fragment` link points to.
+    pub fn find_anchor(&self, fragment: &str) -> Option<&Heading> {
+        let mut start = 0;
+        self.headings.iter().find(|h| {
+            let slug = &self.slugs[start..h.slug_end as usize];
+            start = h.slug_end as usize;
+            slug.eq_ignore_ascii_case(fragment)
+        })
+    }
+
+    /// Link spans on line `i` as (start, end, link id), merging adjacent runs of one link.
+    pub fn link_spans(&self, i: usize) -> impl Iterator<Item = (usize, usize, u16)> + '_ {
+        let (text, runs) = self.line(i);
+        let mut k = 0;
+        std::iter::from_fn(move || {
+            k += runs[k..].iter().position(|r| r.style.link != 0)?;
+            let (start, id) = (runs[k].at as usize, runs[k].style.link);
+            k += runs[k..]
+                .iter()
+                .position(|r| r.style.link != id)
+                .unwrap_or(runs.len() - k);
+            let end = runs.get(k).map_or(text.len(), |r| r.at as usize);
+            Some((start, end, id))
+        })
+    }
+
+    /// True if link `id` on line `i` is the wrapped tail of a link from the line above.
+    pub fn continues_link(&self, i: usize, id: u16) -> bool {
+        i > 0
+            && self
+                .line(i - 1)
+                .1
+                .last()
+                .is_some_and(|r| r.style.link == id)
     }
 
     pub fn code(&self, k: usize) -> &str {
@@ -110,6 +148,7 @@ impl Document {
         self.tasks.clear();
         self.anchors.clear();
         self.code.clear();
+        self.slugs.clear();
     }
 
     pub fn layout(&mut self, src: &str, width: usize, theme: &Theme) {
@@ -123,6 +162,25 @@ impl Document {
             Some(a) if a.0 == line => a.1 = offset,
             _ => self.anchors.push((line, offset)),
         }
+    }
+
+    pub(crate) fn push_heading(
+        &mut self,
+        line: u32,
+        level: u8,
+        parent: Option<u32>,
+        title_at: u16,
+        slug: &str,
+    ) {
+        self.slugs.push_str(slug);
+        let slug_end = self.slugs.len() as u32;
+        self.headings.push(Heading {
+            line,
+            level,
+            parent,
+            title_at,
+            slug_end,
+        });
     }
 
     pub(crate) fn push_code(&mut self, code: &str, first: u32, last: u32) {

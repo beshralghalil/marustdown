@@ -9,10 +9,10 @@ use pulldown_cmark::{
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::config::Styles;
-use crate::doc::{Document, Heading, Task};
+use crate::doc::{Document, Task};
 use crate::highlight::{Highlighter, Span, Token};
 use crate::theme::{Style, Theme};
-use crate::{table, wrap};
+use crate::{links, table, wrap};
 
 const OPTIONS: Options = Options::ENABLE_TABLES
     .union(Options::ENABLE_STRIKETHROUGH)
@@ -256,6 +256,9 @@ struct Builder<'a, 'd> {
     table: Option<Table>,
     task: Option<usize>,
     link_ids: HashMap<String, u16>,
+    heading_text: String,
+    slug: String,
+    slug_counts: HashMap<String, u32>,
     breaks: Vec<u32>,
     spans: Vec<Span>,
     line_buf: String,
@@ -290,6 +293,9 @@ impl<'a, 'd> Builder<'a, 'd> {
             table: None,
             task: None,
             link_ids: HashMap::new(),
+            heading_text: String::new(),
+            slug: String::new(),
+            slug_counts: HashMap::new(),
             breaks: Vec::new(),
             spans: Vec::new(),
             line_buf: String::new(),
@@ -305,6 +311,11 @@ impl<'a, 'd> Builder<'a, 'd> {
         let mut events = Events::new(src);
         while let Some((event, range)) = events.next() {
             self.at = range.start;
+            if self.heading.is_some()
+                && let Event::Text(t) | Event::Code(t) = &event
+            {
+                self.heading_text.push_str(t);
+            }
             match event {
                 Event::Start(tag) => self.start(tag, &mut events),
                 Event::End(tag) => self.end(tag),
@@ -337,6 +348,7 @@ impl<'a, 'd> Builder<'a, 'd> {
             Tag::Paragraph => self.block(),
             Tag::Heading { level, .. } => {
                 self.block();
+                self.heading_text.clear();
                 self.heading = Some(level as usize);
             }
             Tag::BlockQuote(kind) => self.quote(kind),
@@ -576,12 +588,18 @@ impl<'a, 'd> Builder<'a, 'd> {
         {
             parent = headings[p].parent.map(|p| p as usize);
         }
-        headings.push(Heading {
-            line,
-            level: level as u8,
-            parent: parent.map(|p| p as u32),
-            title_at,
-        });
+        let parent = parent.map(|p| p as u32);
+
+        self.slug.clear();
+        links::slugify(&self.heading_text, &mut self.slug);
+        let seen = self.slug_counts.entry(self.slug.clone()).or_insert(0);
+        if *seen > 0 {
+            let _ = write!(self.slug, "-{seen}");
+        }
+        *seen += 1;
+        self.out
+            .doc
+            .push_heading(line, level as u8, parent, title_at, &self.slug);
     }
 
     fn quote(&mut self, kind: Option<BlockQuoteKind>) {
@@ -979,6 +997,34 @@ mod tests {
         let doc = layout("# A\n\nhello world", 5);
         assert_eq!(plain(&doc), "██ A\n━━━━━\n\nhello\nworld");
         assert_eq!(doc.title(&doc.headings[0]), "A");
+    }
+
+    #[test]
+    fn heading_anchors() {
+        let doc = layout("# Hello, World!\n## `code` title\n## Hello, World!", 40);
+        assert_eq!(doc.find_anchor("hello-world").map(|h| h.line), Some(0));
+        assert_eq!(doc.find_anchor("code-title").map(|h| h.level), Some(2));
+        assert!(doc.find_anchor("hello-world-1").is_some());
+        assert!(doc.find_anchor("nope").is_none());
+    }
+
+    #[test]
+    fn link_spans_merge_runs() {
+        let doc = layout("a [**bold** link](u) and [x](v)", 80);
+        let spans: Vec<_> = doc.link_spans(0).collect();
+        let text = doc.line(0).0;
+        assert_eq!(spans.len(), 2);
+        assert_eq!(&text[spans[0].0..spans[0].1], "bold link");
+        assert_eq!(&text[spans[1].0..spans[1].1], "x");
+        assert_eq!(doc.links[spans[1].2 as usize - 1], "v");
+    }
+
+    #[test]
+    fn wrapped_link_continues() {
+        let doc = layout("[aaa bbb](u)", 5);
+        let id = doc.link_spans(1).next().unwrap().2;
+        assert!(doc.continues_link(1, id));
+        assert!(!doc.continues_link(0, id));
     }
 
     #[test]
