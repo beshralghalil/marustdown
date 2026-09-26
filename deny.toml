@@ -1,0 +1,19 @@
+[graph]
+targets = ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]
+
+[advisories]
+yanked = "deny"
+# Transitive unmaintained crates can't be fixed here; vulnerabilities always fail.
+unmaintained = "workspace"
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "Unicode-3.0", "Zlib"]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
