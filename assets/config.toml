@@ -66,6 +66,13 @@ syntax_string = { fg = "green" }
 syntax_number = { fg = "orange" }
 syntax_comment = { fg = "muted", italic = true }
 syntax_type = { fg = "yellow" }
+syntax_function = { fg = "blue" }
+syntax_constant = { fg = "orange" }
+syntax_operator = { fg = "teal" }
+syntax_tag = { fg = "red" }
+syntax_attribute = { fg = "yellow" }
+syntax_inserted = { fg = "green" }
+syntax_deleted = { fg = "red" }
 cursor = { bg = "highlight" }
 status = { fg = "subtle", bg = "surface" }
 search = { fg = "yellow", bold = true, reverse = true }

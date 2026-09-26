@@ -190,14 +190,14 @@ written back to this file.
 
 - [x] Parse markdown
 - [x] Lay out text
-- [ ] Toggle me with `x`
-- [ ] A long task wraps across several lines, and the whole item stays toggleable, so
+- [x] Toggle me with `x`
+- [x] A long task wraps across several lines, and the whole item stays toggleable, so
   pressing `x` on any of its lines works
-- [ ] Tasks nest
+- [x] Tasks nest
   - [x] Subtask done
-  - [ ] Subtask open
+  - [x] Subtask open
 
-1. [ ] Ordered task lists work as well
+1. [x] Ordered task lists work as well
 2. [x] Like this one
 
 ## Code
@@ -332,6 +332,27 @@ local function greet(name)
   return "Hello, " .. name
 end
 ```
+
+```html
+<nav class="top" id="main">
+  <a href="/docs">Docs</a> <!-- tags and attributes -->
+</nav>
+```
+
+```diff
+ unchanged line
+-removed line
++added line
+```
+
+```dockerfile
+FROM rust:1.88 AS build
+COPY . /src
+RUN cargo build --release
+```
+
+Any of the roughly 220 languages bat knows works, by file extension (`rs`, `py`,
+`ts`) or by name (`rust`, `Dockerfile`).
 
 ### Without a language
 

@@ -44,17 +44,20 @@ in a full-screen pager, and every color, glyph and key can be changed in one TOM
 - **Outline picker.** Filter the headings by typing, then jump to one.
 - **Edit in `$EDITOR`** at the cursor's source line, and see the result when you return.
 - **Copy code blocks** to the system clipboard with OSC 52, which also works over SSH.
-- **Syntax highlighting** for Rust, Python, JS/TS, Go, C/C++, shell, JSON, TOML/YAML, SQL
-  and Lua, with no highlighting library.
+- **Syntax highlighting** for about 220 languages, using syntect with bat's syntax
+  definitions from two-face. Colors come from your theme, not from a separate
+  highlighting theme.
 - **Clickable links** (OSC 8) in terminals that support them.
 - **Cat mode**: styled output to stdout, used automatically when the output is piped.
 - **Fully configurable**: themes, per-element styles, glyphs, layout and key bindings.
 - **Fast and small**: memory-mapped input and a flat three-buffer layout with no
-  per-line allocations. The release binary is about 1.4 MB.
+  per-line allocations. Highlighting is cached per code block, so resizing never
+  re-highlights. The release binary is about 3 MB.
 
 ## Install
 
-Requires Rust 1.88 or newer.
+Requires Rust 1.88 or newer and a C compiler, which builds the Oniguruma regex engine
+that syntect uses.
 
 ```sh
 cargo install --path .
@@ -178,7 +181,7 @@ Each entry in `[styles]` is an inline table that accepts `fg`, `bg`, `bold`, `di
 | Quotes and alerts | `quote`, `quote_bar`, `alert_note`, `alert_tip`, `alert_important`, `alert_warning`, `alert_caution` |
 | Lists | `bullet`, `number`, `task_done`, `task_todo`, `rule` |
 | Code blocks | `code_block`, `code_border`, `code_label`, `line_number` |
-| Syntax | `syntax_keyword`, `syntax_string`, `syntax_number`, `syntax_comment`, `syntax_type` |
+| Syntax | `syntax_keyword`, `syntax_string`, `syntax_number`, `syntax_comment`, `syntax_type`, `syntax_function`, `syntax_constant`, `syntax_operator`, `syntax_tag`, `syntax_attribute`, `syntax_inserted`, `syntax_deleted` |
 | Tables | `table_border`, `table_header` |
 | Pager | `cursor`, `status`, `search`, `outline_level`, `hint`, `link_selected` |
 
@@ -223,6 +226,9 @@ The actions are `down`, `up`, `page_down`, `page_up`, `half_down`, `half_up`, `t
 - Links to local markdown files are resolved against the current file's directory, and
   a `#fragment` jumps to the matching heading using GitHub's anchor rules. External links
   open with `xdg-open` (`open` on macOS).
+- A code block's language is looked up by the name after the fence, either a file
+  extension (`rs`, `py`, `ts`) or a language name (`rust`, `Dockerfile`). Unknown
+  languages are shown without highlighting.
 - Copying needs a terminal that supports OSC 52. Under tmux, also set `set -g set-clipboard on`.
 - Toggling a task checks that the file still has a task box at that spot before writing,
   so a file edited behind the viewer's back won't be corrupted.

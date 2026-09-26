@@ -10,7 +10,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::config::Styles;
 use crate::doc::{Document, Task};
-use crate::highlight::{Highlighter, Span, Token};
+use crate::highlight::{self, Span, Token};
 use crate::theme::{Style, Theme};
 use crate::{links, table, wrap};
 
@@ -20,8 +20,14 @@ const OPTIONS: Options = Options::ENABLE_TABLES
     .union(Options::ENABLE_GFM);
 
 /// Lays `src` out into `doc` at `width` columns.
-pub fn build(doc: &mut Document, src: &str, width: usize, theme: &Theme) {
-    Builder::new(doc, theme, width).run(src);
+pub fn build(
+    doc: &mut Document,
+    syntax: &mut highlight::Cache,
+    src: &str,
+    width: usize,
+    theme: &Theme,
+) {
+    Builder::new(doc, syntax, theme, width).run(src);
 }
 
 /// Inline scratch: text plus style runs with absolute offsets, reused between blocks.
@@ -260,8 +266,8 @@ struct Builder<'a, 'd> {
     slug: String,
     slug_counts: HashMap<String, u32>,
     breaks: Vec<u32>,
-    spans: Vec<Span>,
-    line_buf: String,
+    syntax: &'d mut highlight::Cache,
+    norm: String, // the open code block with tabs expanded
     num: String,
     natural: Vec<usize>,
     widths: Vec<usize>,
@@ -270,7 +276,12 @@ struct Builder<'a, 'd> {
 }
 
 impl<'a, 'd> Builder<'a, 'd> {
-    fn new(doc: &'d mut Document, theme: &'a Theme, width: usize) -> Self {
+    fn new(
+        doc: &'d mut Document,
+        syntax: &'d mut highlight::Cache,
+        theme: &'a Theme,
+        width: usize,
+    ) -> Self {
         Builder {
             out: Out {
                 doc,
@@ -297,8 +308,8 @@ impl<'a, 'd> Builder<'a, 'd> {
             slug: String::new(),
             slug_counts: HashMap::new(),
             breaks: Vec::new(),
-            spans: Vec::new(),
-            line_buf: String::new(),
+            syntax,
+            norm: String::new(),
             num: String::new(),
             natural: Vec::new(),
             widths: Vec::new(),
@@ -691,9 +702,9 @@ impl<'a, 'd> Builder<'a, 'd> {
             theme,
             code,
             lang,
-            line_buf,
+            norm,
             num,
-            spans,
+            syntax,
             in_code,
             ..
         } = self;
@@ -743,10 +754,16 @@ impl<'a, 'd> Builder<'a, 'd> {
         };
         let inner = avail.saturating_sub(2 * v.width() + 2 + num_w).max(1);
         let ellipsis_w = g.ellipsis.width();
-        let mut highlighter = Highlighter::new(lang);
         let numbers = s.code_block.over(s.line_number);
+        norm.clear();
         for (i, raw) in body.lines().enumerate() {
-            normalize(raw, layout.tab_width, line_buf);
+            if i > 0 {
+                norm.push('\n');
+            }
+            normalize(raw, layout.tab_width, norm);
+        }
+        let highlighted = syntax.block(out.doc.code_blocks.len(), lang, norm);
+        for (i, line) in norm.lines().enumerate() {
             out.begin_line();
             out.doc.push(v, s.code_border);
             out.doc.push(" ", s.code_block);
@@ -755,18 +772,13 @@ impl<'a, 'd> Builder<'a, 'd> {
                 let _ = write!(num, "{:>w$}  ", i + 1, w = num_w - 2);
                 out.doc.push(num, numbers);
             }
-            let (mut cut, mut used) = wrap::fit(line_buf, inner);
-            let truncated = cut < line_buf.len();
+            let (mut cut, mut used) = wrap::fit(line, inner);
+            let truncated = cut < line.len();
             if truncated {
-                (cut, used) = wrap::fit(line_buf, inner.saturating_sub(ellipsis_w));
+                (cut, used) = wrap::fit(line, inner.saturating_sub(ellipsis_w));
             }
-            match &mut highlighter {
-                Some(hl) => {
-                    hl.line(line_buf, spans);
-                    emit_code(out.doc, &line_buf[..cut], spans, s);
-                }
-                None => out.doc.push(&line_buf[..cut], s.code_block),
-            }
+            let spans = highlighted.map_or(&[][..], |b| b.line(i));
+            emit_code(out.doc, &line[..cut], spans, s);
             if truncated {
                 out.doc.push(&g.ellipsis, numbers);
                 used += ellipsis_w;
@@ -910,6 +922,13 @@ fn emit_code(doc: &mut Document, line: &str, spans: &[Span], s: &Styles<Style>) 
             Token::Number => s.syntax_number,
             Token::Comment => s.syntax_comment,
             Token::Type => s.syntax_type,
+            Token::Function => s.syntax_function,
+            Token::Constant => s.syntax_constant,
+            Token::Operator => s.syntax_operator,
+            Token::Tag => s.syntax_tag,
+            Token::Attribute => s.syntax_attribute,
+            Token::Inserted => s.syntax_inserted,
+            Token::Deleted => s.syntax_deleted,
         };
         doc.push(&line[a..b], base.over(style));
         pos = b;
@@ -917,9 +936,8 @@ fn emit_code(doc: &mut Document, line: &str, spans: &[Span], s: &Styles<Style>) 
     doc.push(&line[pos..], base);
 }
 
-/// Expands tabs, drops a trailing `\r` and replaces control characters.
+/// Appends `line` with tabs expanded, a trailing `\r` dropped and control characters replaced.
 fn normalize(line: &str, tab: usize, out: &mut String) {
-    out.clear();
     let line = line.strip_suffix('\r').unwrap_or(line);
     if !needs_clean(line) {
         return out.push_str(line);

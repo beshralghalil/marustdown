@@ -1,5 +1,6 @@
 use unicode_width::UnicodeWidthStr;
 
+use crate::highlight;
 use crate::layout;
 use crate::theme::{Style, Theme};
 
@@ -52,6 +53,7 @@ pub struct Document {
     anchors: Vec<(u32, usize)>, // (line, source offset) at each block start
     code: String,
     slugs: String,
+    syntax: highlight::Cache, // survives `clear`, so re-layouts don't re-highlight
 }
 
 impl Document {
@@ -153,7 +155,10 @@ impl Document {
 
     pub fn layout(&mut self, src: &str, width: usize, theme: &Theme) {
         self.clear();
-        layout::build(self, src, width, theme);
+        let mut syntax = std::mem::take(&mut self.syntax);
+        layout::build(self, &mut syntax, src, width, theme);
+        syntax.truncate(self.code_blocks.len());
+        self.syntax = syntax;
     }
 
     /// Records that `line` starts the block at source byte `offset`.
