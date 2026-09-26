@@ -20,6 +20,8 @@ typography.
 - **Outline picker.** Filter the headings by typing, then jump to one.
 - **Edit in `$EDITOR`** at the cursor's source line, and see the result when you return.
 - **Copy code blocks** to the system clipboard with OSC 52, which also works over SSH.
+- **Math**: `$…$` and `$$…$$` LaTeX is rendered as Unicode, like `x² + yᵢ`, `∑ᵢ₌₁ⁿ` or
+  `√(x + 1)`, with matrices and cases drawn over several lines.
 - **Syntax highlighting** for about 220 languages, using syntect with bat's syntax
   definitions from two-face. Colors come from your theme, not from a separate
   highlighting theme.

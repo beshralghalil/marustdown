@@ -53,6 +53,7 @@ A theme file holds a `[colors]` table and may override any other table.
 | `color` | `true` | `false` turns colors off; the cursor line is then shown in reverse video |
 | `icons` | `true` | `false` switches to ASCII glyphs |
 | `status_bar` | `true` | Show the status bar |
+| `math` | `true` | Render `$…$` and `$$…$$` LaTeX as Unicode; `false` shows the source |
 
 ## `[colors]`
 
@@ -86,6 +87,7 @@ code = { fg = "orange", bg = "surface" }
 | `h1` … `h6` | Headings and their rule lines |
 | `strong`, `emphasis`, `strike` | `**bold**`, `*italic*`, `~~strike~~` |
 | `code` | Inline code |
+| `math` | Inline and display math |
 | `link`, `link_icon` | Link text and the `↗` after it |
 | `image` | Image alt text |
 | `quote`, `quote_bar` | Blockquote text and bar |

@@ -21,6 +21,19 @@ fn word_count(text: &str) -> HashMap<&str, usize> {
 > [!TIP]
 > Press `y` to copy a code block to the clipboard, even over SSH.
 
+## Math
+
+LaTeX becomes Unicode: Euler's identity $e^{i\pi} + 1 = 0$, a sum
+$\sum_{i=1}^{n} i = \frac{n(n+1)}{2}$, or sets like $x \in \mathbb{R}$.
+
+$$
+\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}
+$$
+
+$$
+A = \begin{pmatrix} a & b \\ c & d \end{pmatrix}
+$$
+
 ## Tasks
 
 - [x] Render markdown in the terminal

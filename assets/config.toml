@@ -19,6 +19,7 @@ scroll_off = 3       # lines kept visible above and below the cursor
 color = true         # false renders without colors (same as --no-color or NO_COLOR)
 icons = true         # false switches to the ASCII glyph set (same as --no-icons)
 status_bar = true    # show the status bar in the pager
+math = true          # render $…$ and $$…$$ LaTeX as Unicode; false shows the source
 
 # Named colors are defined by the theme preset. You can override or add any here:
 #   [colors]
@@ -40,6 +41,7 @@ strong = { bold = true }
 emphasis = { italic = true }
 strike = { strike = true }
 code = { fg = "accent", bg = "surface" }
+math = { fg = "teal" }
 link = { fg = "accent", underline = true }
 link_icon = { fg = "muted" }
 image = { fg = "muted" }
