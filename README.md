@@ -89,122 +89,28 @@ mar --color always doc.md | less -R   # keep the styling when piping
 | `y` | Copy the code block at the cursor |
 | `q` / `Esc` | Quit (`Ctrl-C` always quits) |
 
-Every binding except `Ctrl-C` can be changed, see [Keys](#key-bindings).
+Every binding except `Ctrl-C` can be changed, see [docs/configuration.md](docs/configuration.md#keys).
 
 ## Configuration
 
-The config file lives at `$XDG_CONFIG_HOME/marustdown/config.toml`, which is usually
-`~/.config/marustdown/config.toml`. You don't have to create one. When you do, include
-only what you want to change: anything missing keeps its default, and tables merge key by
-key. All defaults, with comments, are in [`assets/config.toml`](assets/config.toml).
+Config file: `~/.config/marustdown/config.toml` (or `$XDG_CONFIG_HOME/marustdown/config.toml`).
+Every key is optional; set only what you want to change.
 
 ```toml
-theme = "light"
+theme = "light"          # dark, light, ansi, or a file in ~/.config/marustdown/themes/
 
 [layout]
 width = 100
-center = false
 
 [styles.h1]
-fg = "#ff8800"     # h1 stays bold; only the color changes
-
-[glyphs]
-bullets = ["-", "*"]
+fg = "#ff8800"
 
 [keys]
 toggle = ["space"]
-page_down = ["f", "pagedown"]
 ```
 
-Unknown keys and invalid values are reported with their name, so typos don't pass silently.
-
-### Themes
-
-`theme` picks the color palette: `dark` (the default), `light`, or `ansi`. `ansi` uses
-your terminal's own 16 colors, so it follows whatever terminal theme you already have.
-
-To make your own theme, create `~/.config/marustdown/themes/<name>.toml` and set
-`theme = "<name>"`. A theme file needs a `[colors]` table, and it may also override
-`[styles]`, `[glyphs]` or any other section:
-
-```toml
-[colors]
-accent = "#e06c75"
-secondary = "#c678dd"
-subtle = "#abb2bf"
-overlay = "#7f848e"
-muted = "#5c6370"
-surface = "#2c313a"
-highlight = "#3e4451"
-blue = "#61afef"
-green = "#98c379"
-yellow = "#e5c07b"
-orange = "#d19a66"
-red = "#e06c75"
-purple = "#c678dd"
-teal = "#56b6c2"
-```
-
-### Colors
-
-A color is written as one of:
-
-- `"#rrggbb"` or `"#rgb"` for true color,
-- `0` to `255` for your terminal's palette (0–15 follow the terminal theme),
-- `"default"` for the terminal's own foreground or background,
-- the name of an entry in `[colors]`. You can add your own names there too.
-
-### Styles
-
-Each entry in `[styles]` is an inline table that accepts `fg`, `bg`, `bold`, `dim`,
-`italic`, `underline`, `strike` and `reverse`.
-
-| Group | Styles |
-|---|---|
-| Text | `text`, `strong`, `emphasis`, `strike`, `code`, `link`, `link_icon`, `image` |
-| Headings | `h1` … `h6` (a heading's rule line uses its own style) |
-| Quotes and alerts | `quote`, `quote_bar`, `alert_note`, `alert_tip`, `alert_important`, `alert_warning`, `alert_caution` |
-| Lists | `bullet`, `number`, `task_done`, `task_todo`, `rule` |
-| Code blocks | `code_block`, `code_border`, `code_label`, `line_number` |
-| Syntax | `syntax_keyword`, `syntax_string`, `syntax_number`, `syntax_comment`, `syntax_type`, `syntax_function`, `syntax_constant`, `syntax_operator`, `syntax_tag`, `syntax_attribute`, `syntax_inserted`, `syntax_deleted` |
-| Tables | `table_border`, `table_header` |
-| Pager | `cursor`, `status`, `search`, `outline_level`, `hint`, `link_selected` |
-
-### Glyphs
-
-`[glyphs]` controls every character the viewer draws: heading markers and rules, bullets
-by depth, task boxes, the quote bar, the link and image markers, the code box and table
-border sets, alert titles, the ellipsis for cut-off code lines, and the breadcrumb and
-status separators. Set any of them to `""` to hide it. `icons = false` or `--no-icons`
-switches to an ASCII set, and any glyphs you set yourself still apply on top of it.
-
-### Layout
-
-| Key | Default | |
-|---|---|---|
-| `width` | `90` | Maximum content width in columns |
-| `margin` | `2` | Minimum free columns on each side |
-| `center` | `true` | Center the content; otherwise indent by `margin` |
-| `line_numbers` | `true` | Number code block lines |
-| `tab_width` | `4` | Tab stops in code blocks |
-| `scroll_off` | `3` | Lines kept visible around the cursor |
-| `color` | `true` | `false` is the same as `--no-color` |
-| `icons` | `true` | `false` is the same as `--no-icons` |
-| `status_bar` | `true` | Show the pager's status bar |
-
-### Key bindings
-
-Each action in `[keys]` takes a list of keys. A key is one of:
-
-- a character: `"j"`, `"G"`, `"/"`,
-- a sequence of up to four characters: `"]]"`, `"gg"`,
-- a named key: `up`, `down`, `left`, `right`, `pageup`, `pagedown`, `home`, `end`,
-  `enter`, `esc`, `tab`, `backtab`, `backspace`, `delete`, `space`,
-- a modifier combination: `"ctrl-d"`, `"alt-x"`, `"ctrl-pagedown"`.
-
-The actions are `down`, `up`, `page_down`, `page_up`, `half_down`, `half_up`, `top`,
-`bottom`, `next_heading`, `prev_heading`, `search`, `next_match`, `prev_match`, `toggle`,
-`next_link`, `prev_link`, `open`, `hints`, `back`, `copy`, `outline`, `edit` and `quit`. The status bar hints update to match your bindings.
+The full reference is in [docs/configuration.md](docs/configuration.md), and every
+default is in [assets/config.toml](assets/config.toml).
 
 ## Notes
 
@@ -222,14 +128,13 @@ The actions are `down`, `up`, `page_down`, `page_up`, `half_down`, `half_up`, `t
 ## Development
 
 ```sh
-cargo test       # unit tests for layout, wrapping, tables, highlighting, config, keys
+cargo test
 cargo clippy --all-targets
 ```
 
-The design is in [plan.md](plan.md). In short, `source` memory-maps the input, `layout`
-walks the pulldown-cmark events into a `Document` (flat text, style runs and line ends,
-with no escape codes), and `render` and `pager` turn it into terminal output without
-knowing anything about markdown.
+`source` memory-maps the input, `layout` turns pulldown-cmark events into a `Document`
+(flat text, style runs and line ends, with no escape codes), and `render` and `pager`
+turn that into terminal output without knowing anything about markdown.
 
 ## License
 
