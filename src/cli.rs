@@ -92,7 +92,9 @@ mod tests {
     #[test]
     fn man_page_and_completions_are_current() {
         let mut man = Vec::new();
-        clap_mangen::Man::new(Args::command())
+        // Without the version, release bumps don't make the committed page stale.
+        clap_mangen::Man::new(Args::command().version(None))
+            .source("marustdown")
             .render(&mut man)
             .unwrap();
         check("assets/man/mar.1", &man);
