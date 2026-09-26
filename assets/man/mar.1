@@ -1,10 +1,10 @@
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
-.TH mar 1  "mar 0.1.0" 
+.TH mar 1  marustdown 
 .SH NAME
 mar \- A fast, configurable terminal markdown viewer
 .SH SYNOPSIS
-\fBmar\fR [\fB\-\-cat\fR] [\fB\-\-color\fR] [\fB\-\-width\fR] [\fB\-\-theme\fR] [\fB\-\-no\-color\fR] [\fB\-\-no\-icons\fR] [\fB\-\-config\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILE\fR] 
+\fBmar\fR [\fB\-\-cat\fR] [\fB\-\-color\fR] [\fB\-\-width\fR] [\fB\-\-theme\fR] [\fB\-\-no\-color\fR] [\fB\-\-no\-icons\fR] [\fB\-\-config\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILE\fR] 
 .SH DESCRIPTION
 Render GitHub\-flavored markdown in a full\-screen pager, with syntax\-highlighted code, task lists you can check off, keyboard link following and an outline. When stdout isn\*(Aqt a terminal, the rendered document is printed instead.
 .SH OPTIONS
@@ -45,9 +45,6 @@ Config file to use instead of $XDG_CONFIG_HOME/marustdown/config.toml
 \fB\-h\fR, \fB\-\-help\fR
 Print help (see a summary with \*(Aq\-h\*(Aq)
 .TP
-\fB\-V\fR, \fB\-\-version\fR
-Print version
-.TP
 [\fIFILE\fR]
 Markdown file to view; `\-` or nothing reads stdin
 .SH EXTRA
@@ -67,5 +64,3 @@ Keys:
 
 Configuration: $XDG_CONFIG_HOME/marustdown/config.toml (usually ~/.config/marustdown/config.toml).
 Reference: https://github.com/beshralghalil/marustdown/blob/main/docs/configuration.md
-.SH VERSION
-v0.1.0
