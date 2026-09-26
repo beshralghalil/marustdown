@@ -50,7 +50,7 @@ A theme file holds a `[colors]` table and may override any other table.
 | `line_numbers` | `true` | Number the lines of code blocks |
 | `tab_width` | `4` | Tab stop width in code blocks, 1–16 |
 | `scroll_off` | `3` | Lines kept visible above and below the cursor |
-| `color` | `true` | `false` turns colors off |
+| `color` | `true` | `false` turns colors off; the cursor line is then shown in reverse video |
 | `icons` | `true` | `false` switches to ASCII glyphs |
 | `status_bar` | `true` | Show the status bar |
 
