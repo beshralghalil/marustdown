@@ -1,431 +1,400 @@
-# marustdown — Design Plan
+# marustdown feature tour
 
-A terminal markdown viewer in Rust. One file, full screen, status bar. Small dependency list,
-low memory, no frame-time surprises. Nothing in here exists unless it shows up in §1.
-
----
-
-## 1. Target Output
-
-```
-        ██ Usage
-        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-        Run the server with your config file. See the configuration
-        section↗ for all options.
-
-        ╭─  rust ─────────────────────────────────────── [y] copy ─╮
-        │ 1  fn main() {                                            │
-        │ 2      let cfg = Config::load("app.toml")?;               │
-        │ 3      server::run(cfg).await                             │
-        │ 4  }                                                      │
-        ╰───────────────────────────────────────────────────────────╯
-
-        ▌ 󰋽 NOTE
-        ▌ Requires Rust 1.80 or newer.
-
-        ┌──────────┬─────────┬──────────────────────────────────┐
-        │ Flag     │ Default │ Description                      │
-        ├──────────┼─────────┼──────────────────────────────────┤
-        │ --port   │ 8080    │ Port to listen on                │
-        │ --watch  │ false   │ Reload when files change         │
-        └──────────┴─────────┴──────────────────────────────────┘
-
-        ✔ Write docs    ☐ Add tests    ☐ Ship it
-
-  ln 84/200 │ Usage › Configuration          / search  n next  ]] next heading  y copy  q quit
-```
+This document uses every markdown construct marustdown renders. Open it with
+`mar data/sample.md` and try the keys as you read: `j`/`k` move the cursor, `]]` and
+`[[` jump between headings, `o` opens the outline, `/` searches, `x` checks off a task,
+`y` copies a code block, and `e` opens this file in your editor.
 
 ---
 
-## 2. Shape
+## Headings
 
-Three layers, one type across each boundary, arrows only point right.
+The six ATX levels follow. Every heading appears in the outline (`o`) and in the
+breadcrumb on the status bar.
 
-```
-  path/stdin         &str            Document          bytes
- ──────────► source ──────► doc ──────────────► render ──────► stdout
-   memmap2           pure: no terminal        no markdown
-```
+# Heading level 1
+## Heading level 2
+### Heading level 3
+#### Heading level 4
+##### Heading level 5
+###### Heading level 6
 
-Two rules keep it that way:
+Setext heading, level 1
+=======================
 
-1. `doc` emits no escape codes and never reads the terminal size — width is an argument. It is
-   a pure `&str -> Document`, so it tests with plain string asserts.
-2. `render`/`pager` never touch `pulldown-cmark`. They only know `Document`.
+Setext heading, level 2
+-----------------------
 
-### Files
+### A heading with `inline code`, **bold** and a [link](#links)
 
-Nine flat files, no subdirectories.
+## Paragraphs and line breaks
 
-```
-src/
-  main.rs        args, TTY check, pick cat or pager
-  source.rs      mmap the file (or slurp stdin) -> &str
-  theme.rs       palette, glyphs, Style
-  doc.rs         Document + the event loop (headings, lists, quotes, code)
-  wrap.rs        find line breaks for a width
-  table.rs       GFM table -> lines
-  highlight.rs   code token scanner
-  render.rs      Document line -> ANSI/OSC bytes
-  pager.rs       raw mode, scroll, search
-```
+A paragraph is one or more lines of text. Single line breaks inside a paragraph are
+soft, so these three source lines
+flow together
+into one wrapped paragraph that fills the content width and reflows when you resize the terminal.
 
-| File | May use |
-|---|---|
-| `source`, `theme` | nothing from this crate |
-| `wrap`, `highlight` | `theme` |
-| `doc`, `table` | `theme`, `wrap`, `highlight`, `pulldown-cmark` |
-| `render`, `pager` | `doc`, `theme`, `crossterm` |
+A line ending in two spaces  
+forces a hard break, and so does a trailing backslash\
+like this. An inline `<br>` works too:<br>this sentence starts on a new line.
 
----
+Very long words are split rather than overflowing the page:
+Pneumonoultramicroscopicsilicovolcanoconiosis_and_a_few_more_characters_to_make_it_really_long.
 
-## 3. Input (`source.rs`)
+## Inline formatting
 
-`pulldown-cmark` only takes `&'input str`. There is no `BufRead` API and there can't be one:
-events borrow from the buffer (`CowStr::Borrowed`) and markdown needs arbitrary lookahead
-(reference definitions can come after their use, setext headings need the next line). The whole
-source has to be resident — mmap makes it resident without a heap copy, and lets the kernel page
-it in on demand and evict it again.
+- **Bold** and __bold__
+- *Italic* and _italic_
+- ***Bold italic*** and **bold with *nested italic* inside**
+- ~~Strikethrough~~ and ~~**bold strikethrough**~~
+- `Inline code`, and code with backticks inside: `` `tick` ``
+- Escaped characters: \*not italic\*, \`not code\`, \# not a heading
+- Unicode is measured by display width: 日本語のテキスト, café, naïve, emoji 🚀✨
+
+## Links
+
+- Inline link: [pulldown-cmark](https://github.com/pulldown-cmark/pulldown-cmark)
+- Link with a title: [Rust](https://www.rust-lang.org "The Rust language")
+- Reference link: [CommonMark spec][spec] and a collapsed reference: [GFM][]
+- Autolink: <https://github.github.com/gfm/>
+- Email autolink: <someone@example.com>
+- Link to a section of this document: [jump to tables](#tables)
+- Relative link to another file: [the plan](../plan.md)
+- Link with **bold text** inside: [**bold link**](https://example.com)
+
+[spec]: https://spec.commonmark.org/
+[GFM]: https://github.github.com/gfm/
+
+In terminals that support OSC 8 (kitty, WezTerm, iTerm2, GNOME Terminal and others),
+links are clickable.
+
+## Images
+
+Terminals can't show the image itself, so marustdown shows its alt text as a link to
+the file:
+
+![Ferris the crab](https://rustacean.net/assets/rustacean-flat-happy.png)
+
+An image inside a link: [![build badge](https://img.shields.io/badge/build-passing-green)](https://example.com/ci)
+
+## Blockquotes
+
+> A plain blockquote is drawn with a bar and italic text.
+> It can span several lines, and wraps like any paragraph when the text is long enough
+> to reach the edge of the content area.
+>
+> A second paragraph inside the same quote.
+
+> Quotes can hold other blocks:
+>
+> - a list item
+> - another one
+>
+> ```sh
+> echo "code inside a quote"
+> ```
+>
+> > And quotes nest inside quotes.
+> > > As deep as you like.
+
+## Alerts
+
+> [!NOTE]
+> Useful information that users should know, even when skimming content.
+
+> [!TIP]
+> Helpful advice for doing things better or more easily.
+
+> [!IMPORTANT]
+> Key information users need to know to achieve their goal.
+
+> [!WARNING]
+> Urgent info that needs immediate user attention to avoid problems.
+
+> [!CAUTION]
+> Advises about risks or negative outcomes of certain actions.
+>
+> Alerts can hold several paragraphs, `code`, and **formatting**.
+
+## Lists
+
+### Unordered, nested
+
+- First level
+- Bullets change with depth
+  - Second level
+  - Another item
+    - Third level
+      - Fourth level wraps back to the first bullet shape
+- Back at the top. Long items wrap with a hanging indent, so the continuation lines
+  line up under the text rather than under the bullet.
+
+### Ordered
+
+1. Numbers are right-aligned
+2. Second
+3. Third
+4. Fourth
+5. Fifth
+6. Sixth
+7. Seventh
+8. Eighth
+9. Ninth
+10. Tenth: the single digits above are padded to line up with this one
+11. Eleventh
+
+A list can start at any number:
+
+7. Seven
+8. Eight
+9. Nine
+
+### Loose lists
+
+- A loose list has blank lines between items.
+
+- Each item can hold several paragraphs.
+
+  This is a second paragraph in the same item.
+
+- And other blocks too:
+
+  ```python
+  print("code inside a list item")
+  ```
+
+### Mixed nesting
+
+1. Install the tool
+   - with cargo: `cargo install --path .`
+   - or build it: `cargo build --release`
+2. Configure it
+   > Every setting is optional, so you can start with an empty file.
+3. Read markdown
+   1. in the pager
+   2. or with `--cat`
+
+## Task lists
+
+Move the cursor onto a task and press `x` (or `Enter`) to check it off. The change is
+written back to this file.
+
+- [x] Parse markdown
+- [x] Lay out text
+- [ ] Toggle me with `x`
+- [ ] A long task wraps across several lines, and the whole item stays toggleable, so
+  pressing `x` on any of its lines works
+- [ ] Tasks nest
+  - [x] Subtask done
+  - [ ] Subtask open
+
+1. [ ] Ordered task lists work as well
+2. [x] Like this one
+
+## Code
+
+### Fenced blocks with syntax highlighting
 
 ```rust
-pub enum Source {
-    Mapped(memmap2::Mmap),
-    Buffered(String),       // stdin, or files too small for mmap to pay off
+use std::collections::HashMap;
+
+/// Counts words in a string.
+fn word_count(text: &str) -> HashMap<&str, usize> {
+    let mut counts = HashMap::new();
+    for word in text.split_whitespace() {
+        *counts.entry(word).or_insert(0) += 1; // count it
+    }
+    counts
 }
 
-const MMAP_MIN: u64 = 64 * 1024;   // under this, read() beats mmap + page faults
-
-impl Source {
-    pub fn open(path: &Path) -> io::Result<Self> {
-        let file = File::open(path)?;
-        if file.metadata()?.len() < MMAP_MIN {
-            let mut s = String::new();
-            (&file).read_to_string(&mut s)?;
-            return Ok(Source::Buffered(s));
-        }
-        let map = unsafe { memmap2::Mmap::map(&file)? };
-        std::str::from_utf8(&map).map_err(invalid_data)?;   // validated once, SIMD, ~GB/s
-        Ok(Source::Mapped(map))
-    }
-
-    pub fn text(&self) -> &str {
-        match self {
-            Source::Mapped(m) => unsafe { std::str::from_utf8_unchecked(m) }, // checked in open
-            Source::Buffered(s) => s,
-        }
-    }
-}
-```
-
-- `Mmap::map` is `unsafe` because another process truncating the file while it's mapped gives
-  you SIGBUS. Acceptable for a viewer; say so in the comment rather than pretending.
-- `MMAP_MIN` also covers empty files, where `Mmap::map` errors on some platforms.
-- `text()` borrows `self`, so keep `Source` in a `main` local and pass `&str` down. `Document`
-  is fully owned, so the lifetime stops there and no other file needs a lifetime parameter.
-
-Parser options — enable only what §1 renders, since each one costs parse time:
-
-```rust
-Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH
-    | Options::ENABLE_TASKLISTS | Options::ENABLE_GFM   // GFM is what fills BlockQuoteKind
-```
-
-Use the plain `Parser`, not `into_offset_iter()` — source ranges are only useful for incremental
-reload, which isn't happening.
-
----
-
-## 4. Document (`doc.rs`)
-
-This is the one place where the memory and speed of the whole program is decided, so it gets
-the attention. Everything else is straightforward code.
-
-A rendered document is text plus style changes. The obvious model —
-`Vec<Line { spans: Vec<Span { text: String, .. }> }>` — costs two allocations per line plus one
-per span. A 5 MB file is roughly 100k lines and 300k spans: about 400k live allocations and
-~40 MB once allocator overhead is counted. Every resize frees and re-allocates all of it.
-
-Three flat buffers do the same job in **three** allocations, about 9 MB, and reuse their
-capacity on resize:
-
-```rust
-// theme.rs
-pub type Color = u8;   // index into Theme::palette; 0 = terminal default
-
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub struct Style {
-    pub fg: Color,
-    pub bg: Color,
-    pub attrs: u8,   // BOLD | DIM | ITALIC | UNDERLINE | STRIKE bitflags
-    pub link: u16,   // index into Document::links; 0 = none
-}                    // 6 bytes, Copy, compares in one shot
-
-// doc.rs
-#[derive(Clone, Copy)]
-pub struct Run { pub at: u16, pub style: Style }   // 8 bytes; `at` is relative to line start
-
-struct LineMeta { text_end: u32, runs_end: u32 }   // 8 bytes; start = previous line's end
-
-pub struct Document {
-    text:  String,          // every line's plain text, concatenated, no escapes
-    runs:  Vec<Run>,        // a style holds until the next Run
-    lines: Vec<LineMeta>,
-    pub links:       Vec<String>,   // OSC 8 targets, indexed by Style::link
-    pub headings:    Vec<Heading>,  // { line: u32, level: u8, parent: u32 }
-    pub code_blocks: Vec<String>,   // raw text for `y`; few of them, so plain Strings are fine
-}
-```
-
-Palette indices instead of `(u8, u8, u8)` shrink `Style` to 6 bytes, make `--no-color` a
-one-line swap, and make the theme a single table.
-
-Read side — two lines of arithmetic:
-
-```rust
-impl Document {
-    pub fn len(&self) -> usize { self.lines.len() }
-
-    pub fn line(&self, i: usize) -> (&str, &[Run]) {
-        let (t0, r0) = match i.checked_sub(1) {
-            Some(p) => (self.lines[p].text_end as usize, self.lines[p].runs_end as usize),
-            None => (0, 0),
-        };
-        let m = &self.lines[i];
-        (&self.text[t0..m.text_end as usize], &self.runs[r0..m.runs_end as usize])
-    }
-}
-```
-
-Write side — `push` merges adjacent equal styles, `end_line` closes a line:
-
-```rust
-impl Document {
-    fn push(&mut self, s: &str, style: Style) {
-        let (line_start, run_start) = self.open_line();     // ends of the previous LineMeta
-        if self.runs.len() == run_start || self.runs.last().unwrap().style != style {
-            let at = (self.text.len() - line_start) as u16;
-            self.runs.push(Run { at, style });
-        }
-        self.text.push_str(s);
-    }
-
-    fn end_line(&mut self) {
-        self.lines.push(LineMeta {
-            text_end: self.text.len() as u32,
-            runs_end: self.runs.len() as u32,
-        });
-    }
-
-    /// Reuse every buffer; nothing is freed, so a resize allocates nothing.
-    pub fn clear(&mut self) {
-        self.text.clear(); self.runs.clear(); self.lines.clear();
-        self.links.clear(); self.headings.clear(); self.code_blocks.clear();
-    }
+fn longest<'a>(a: &'a str, b: &'a str) -> &'a str {
+    if a.len() > b.len() { a } else { b }
 }
 ```
 
-Three things fall out of `text` being plain:
+```python
+from dataclasses import dataclass
 
-- **Width** is `UnicodeWidthStr::width(text)` directly — no escape skipping.
-- **Search** is `text.find(needle)` directly. Highlighting splits the run at the match offset at
-  render time; nothing is stored.
-- **Breadcrumbs** are rebuilt by walking `headings[..].parent` up from the heading at or above
-  the top visible line. No per-line `Vec<String>` to clone.
+@dataclass
+class Point:
+    x: float = 0.0
+    y: float = 0.0
 
-### The event loop
+    def distance(self, other: "Point") -> float:
+        # Euclidean distance
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
+```
 
-One `Vec<Frame>` stack handles all nesting, so there are no "am I in a quote inside a list"
-special cases:
+```javascript
+const fetchUser = async (id) => {
+  const res = await fetch(`/api/users/${id}`);
+  if (!res.ok) throw new Error("request failed"); // bail out
+  return res.json();
+};
+```
 
-```rust
-struct Frame {
-    first: (String, Style),   // prefix for the frame's first line: "  • " or "▌ "
-    cont:  (String, Style),   // prefix for every line after it:    "    " or "▌ "
+```typescript
+interface User {
+  id: number;
+  name: string;
+}
+
+export function greet(user: User): string {
+  return `Hello, ${user.name}`;
 }
 ```
 
-`Start(BlockQuote | List | Item)` pushes, the matching `End` pops. A line's prefix is the stack
-concatenated; the text width is `width - stack_width()`. Blockquotes in lists, alerts in quotes
-and nested bullets all work with no extra code.
+```go
+package main
 
-Inline events accumulate into two reusable scratch buffers (`String` + `Vec<Run>`) that are
-cleared per block, never reallocated. At `End(Paragraph)` the scratch is wrapped and copied into
-the arena.
+import "fmt"
 
----
-
-## 5. What Gets Drawn
-
-**Headings** — H1 `██ ` bold accent plus a full-width `━` rule; H2 `▌ ` bold secondary plus a
-`─` rule; H3–H6 bold and progressively dimmer, no rule. Blank line either side.
-
-**Paragraphs** — wrapped to `min(term_width - 2 * margin, --width)`, default 90, centered.
-
-**Inline** — bold, italic, strikethrough. `` `code` `` gets accent fg plus a bg tint and one
-space of padding each side. Links get underline, an OSC 8 target, and a dim `↗`. Images render
-as dim `🖼 alt`.
-
-**Code blocks** — `╭─  rust ─── [y] copy ─╮`, dim right-aligned line numbers, bg tint to the box
-edge. Over-long lines truncate with `…`.
-
-**Alerts and quotes** — plain quote is a dim `▌` bar in italic. `BlockQuoteKind` from
-`ENABLE_GFM` gives the five alerts: NOTE blue, TIP green, IMPORTANT purple, WARNING yellow,
-CAUTION red — colored bar, icon, bold uppercase title.
-
-**Lists** — `•`, `◦`, `▪` by depth, repeating. Ordered numbers right-aligned. Tasks `✔` green /
-`☐` dim. Hanging indent comes from `Frame::cont`.
-
-**Tables** — cells to plain text, natural widths, shrink the widest column until it fits, then
-wrap. `┌┬┐ ├┼┤ └┴┘ │ ─`, bold header, GFM alignment respected.
-
-**Rule** — a dim `─` across the content width.
-
-**Glyphs** — `char` constants in `theme.rs` with an ASCII fallback set behind `--no-icons`.
-
-### Wrapping (`wrap.rs`)
-
-Keep it a pure function over plain text so it needs no knowledge of styles at all:
-
-```rust
-/// Appends byte offsets where `text` should break to fit `width` columns.
-/// Reuses `breaks`; allocates nothing.
-pub fn breaks(text: &str, width: usize, breaks: &mut Vec<u32>);
-```
-
-Greedy fill, measured with `UnicodeWidthStr::width` and never `len()`. Hard-split only words
-longer than a whole line. The caller slices the scratch buffer at those offsets and carries the
-runs across. Testable with plain `assert_eq!` on offsets.
-
-### Highlighting (`highlight.rs`)
-
-A ~150-line char scanner, no dependency, covering most of the visual effect: comments (`//`,
-`#`, `--`, `/* */`) dim italic, strings green, numbers orange, a small `&[&str]` keyword table
-per language (rust, python, js/ts, go, bash, json) purple bold, capitalized words yellow, the
-rest default. It writes `Run`s straight into the document.
-
----
-
-## 6. Output (`render.rs`)
-
-```rust
-pub fn line(doc: &Document, i: usize, theme: &Theme, out: &mut String) {
-    let (text, runs) = doc.line(i);
-    for (k, r) in runs.iter().enumerate() {
-        let end = runs.get(k + 1).map_or(text.len(), |n| n.at as usize);
-        sgr(r.style, theme, out);                      // only what changed since the last run
-        if r.style.link != 0 { osc8_open(&doc.links[r.style.link as usize - 1], out); }
-        out.push_str(&text[r.at as usize..end]);
-        if r.style.link != 0 { out.push_str("\x1b]8;;\x1b\\"); }
-    }
-    out.push_str("\x1b[0m");
+func main() {
+	ch := make(chan int, 3)
+	for i := 0; i < 3; i++ {
+		ch <- i * 10
+	}
+	close(ch)
+	for v := range ch {
+		fmt.Println(v) // tabs are expanded to the configured tab width
+	}
 }
 ```
 
-Speed rules, all cheap:
+```c
+#include <stdio.h>
 
-- One reusable `String` per frame. `buf.clear()` keeps the capacity, so after the first frame
-  the pager allocates nothing. One `write_all` plus one flush per frame — no flicker, no
-  per-line syscalls.
-- Emit SGR only for the attributes that differ from the previous run.
-- Render only `lines[scroll .. scroll + height - 1]`.
-
-Clipboard is OSC 52 with a hand-rolled base64 (about 20 lines) — it works over SSH, unlike
-`arboard`. tmux needs `set -g set-clipboard on`.
-
-```rust
-pub fn clipboard(text: &str) -> String { format!("\x1b]52;c;{}\x07", base64(text.as_bytes())) }
+/* A classic block comment
+   spanning several lines. */
+int main(void) {
+    const char *msg = "hello";
+    printf("%s, %d\n", msg, 42);
+    return 0;
+}
 ```
 
----
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-## 7. Pager (`pager.rs`)
-
-Raw mode, alternate screen, hidden cursor, all restored on exit **and** from a `panic::set_hook`.
-On resize: `doc.clear()`, re-layout at the new width, keep the top heading in view.
-
-| Key | Action |
-|---|---|
-| `j`/`↓`, `k`/`↑` | Line |
-| `Space`/`PgDn`, `b`/`PgUp` | Page |
-| `d` / `u` | Half page |
-| `g` / `G` | Top / bottom |
-| `]]` / `[[` | Next / previous heading |
-| `/`, `n`, `N` | Search, next, previous |
-| `y` | Copy nearest code block |
-| `q` / `Esc` | Quit |
-
-Status bar: `ln 84/200 │ Usage › Configuration` on the left, key hints on the right.
-
----
-
-## 8. CLI (`main.rs`)
-
-```
-md <file.md>          pager
-md <file.md> --cat    styled output, exit (automatic when stdout isn't a TTY)
-md -                  stdin
-  --width <n>         content width (default 90)
-  --no-color          plain text
-  --no-icons          ASCII glyphs
+for file in *.md; do
+  echo "rendering $file" # comment
+  mar --cat "$file" > "${file%.md}.ansi"
+done
 ```
 
-Hand-parsed with `std::env::args()`; pipe detection with `std::io::IsTerminal`. Both are std.
-
----
-
-## 9. Dependencies
-
-A crate only for what's genuinely hard by hand. Anything that's "write some escape codes" is
-hand-written.
+```json
+{
+  "name": "marustdown",
+  "version": "0.1.0",
+  "features": ["pager", "search", "tasks"],
+  "stable": true,
+  "license": null
+}
+```
 
 ```toml
-[package]
-name = "marustdown"
-version = "0.1.0"
-edition = "2024"
+# ~/.config/marustdown/config.toml
+theme = "dark"
 
-[[bin]]
-name = "md"
-path = "src/main.rs"
-
-[dependencies]
-pulldown-cmark = { version = "0.13", default-features = false }  # drops the HTML renderer
-memmap2        = "0.9"                                           # ~300 LOC, zero deps
-crossterm      = { version = "0.29", default-features = false, features = ["events"] }
-unicode-width  = "0.2"
-
-[profile.release]
-opt-level = "s"
-lto = true
-codegen-units = 1
-strip = true
-panic = "abort"
+[layout]
+width = 100
+center = true
 ```
 
-Four crates, no features, no optional deps. GFM tables, task lists, strikethrough and alerts are
-runtime `Options` flags, not Cargo features. crossterm on Windows also needs `"windows"`.
+```yaml
+server:
+  port: 8080
+  debug: false # overridden in production
+```
+
+```sql
+SELECT name, COUNT(*) AS total
+FROM orders
+WHERE status = 'shipped'
+GROUP BY name
+ORDER BY total DESC
+LIMIT 10;
+```
+
+```lua
+local function greet(name)
+  -- say hello
+  return "Hello, " .. name
+end
+```
+
+### Without a language
+
+```
+No language means no highlighting.
+Line numbers and the box are still drawn.
+```
+
+### Indented code block
+
+    Four spaces of indentation make a code block too.
+    It has no language label.
+
+### Long lines are cut off
+
+```text
+This line is far too long to fit in the box, so it is cut off at the edge with an ellipsis instead of wrapping onto a second line.
+```
+
+## Tables
+
+| Left aligned | Centered | Right aligned |
+|:-------------|:--------:|--------------:|
+| apples       | 3        | $1.20         |
+| bananas      | 12       | $0.50         |
+| cherries     | 250      | $15.00        |
+
+Cells can hold inline formatting:
+
+| Flag        | Default | Description                        |
+|-------------|---------|------------------------------------|
+| `--cat`     | off     | Print styled output and **exit**   |
+| `--width`   | `90`    | Maximum content width, *in columns* |
+| `--theme`   | `dark`  | One of [dark, light, ansi](#themes) |
+| `--no-icons`| off     | ~~Nerd Font~~ ASCII glyphs          |
+
+Wide tables shrink their widest columns to fit, and wrap the text inside:
+
+| Feature | Status | Notes |
+|---------|:------:|-------|
+| Wrapping | ✔ | Cell text wraps inside its column when the table is wider than the screen, so nothing gets cut off or spills past the right edge. |
+| Line breaks | ✔ | A `<br>` in a cell<br>starts a new line within that cell. |
+| Alignment | ✔ | Left, center and right alignment from the delimiter row are respected on every wrapped line. |
+
+## Horizontal rules
+
+Three or more dashes, asterisks or underscores:
 
 ---
 
-## 10. Not In This Version
+***
 
-Named so they don't creep back in: `syntect`, live reload / `--watch`, footnotes, math,
-smart punctuation, images, mouse capture, kitty text sizing, incremental re-layout, and the
-header line with the progress bar.
+___
 
----
+## HTML
 
-## 11. Milestones
+Inline tags such as <kbd>Ctrl</kbd>+<kbd>C</kbd> are dropped and their text kept. HTML
+blocks aren't rendered:
 
-1. **Skeleton** — `source` + `theme`, dump events. [src/main.rs](src/main.rs) already does this
-   with `read_to_string`; swap in `Source`.
-2. **Cat mode** — `doc` (headings, paragraphs, inline, `wrap`, frame stack) + `render`. This
-   alone is already a useful styled `cat`.
-3. **Blocks** — code boxes, quotes, alerts, lists, tasks, rules.
-4. **Tables**.
-5. **Pager** — raw mode, scroll, status bar, resize.
-6. **Polish** — `highlight`, OSC 8, `y` copy, heading jumps, search.
+<details>
+<summary>This whole block is hidden in the viewer</summary>
+Nothing between the tags appears.
+</details>
 
-Because `doc` is pure, steps 2–4 test as `&str -> Document` with no terminal. Keep a
-`fn plain(doc: &Document) -> String` that drops styles so the asserts stay readable.
+## Themes
+
+Run this file with `mar --theme light data/sample.md` or `mar --theme ansi data/sample.md`
+to compare the built-in presets, and with `--no-icons` or `--no-color` for the plain
+fallbacks. See the README for the full configuration reference.
+
+## Not supported
+
+Footnotes[^1] and math such as $e^{i\pi} + 1 = 0$ are shown as plain text.
+
+[^1]: This footnote definition is shown as a plain paragraph.
