@@ -14,12 +14,10 @@ Set Margin 30
 Set MarginFill "#313244"
 Set BorderRadius 12
 Set WindowBar Colorful
-Set Theme "Catppuccin Mocha"
+Set Theme "GitHub Dark"
 Set TypingSpeed 90ms
 
-Hide
-Type "cp docs/demo.md /tmp/marustdown-demo.md && clear" Enter
-Type "./target/release/mar /tmp/marustdown-demo.md" Enter
+Type "mar docs/demo.md" Enter
 Sleep 1s
 Show
 
