@@ -36,17 +36,20 @@ fn main() -> ExitCode {
 }
 
 fn run(args: Args) -> Result<(), String> {
-    let mut cfg = config::load(args.config.as_deref(), args.theme.as_deref(), args.no_icons)?;
-    if let Some(width) = args.width {
-        cfg.layout.width = width;
-    }
     let color = if args.no_color {
         ColorMode::Never
     } else {
         args.color
     };
-    if color == ColorMode::Never || std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
-        cfg.layout.color = false;
+    let overrides = config::Overrides {
+        theme: args.theme.as_deref(),
+        no_icons: args.no_icons,
+        no_color: color == ColorMode::Never
+            || std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()),
+    };
+    let mut cfg = config::load(args.config.as_deref(), &overrides)?;
+    if let Some(width) = args.width {
+        cfg.layout.width = width;
     }
     let terminal = io::stdout().is_terminal();
     let paged = !args.cat && terminal;

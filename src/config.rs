@@ -9,6 +9,7 @@ use toml::{Table, Value};
 
 const DEFAULT: &str = include_str!("../assets/config.toml");
 const ASCII: &str = include_str!("../assets/ascii.toml");
+const NO_COLOR: &str = include_str!("../assets/nocolor.toml");
 const PRESETS: [(&str, &str); 3] = [
     ("dark", include_str!("../assets/themes/dark.toml")),
     ("light", include_str!("../assets/themes/light.toml")),
@@ -222,9 +223,17 @@ pub struct Glyphs {
     pub separator: String,
 }
 
+/// Command-line settings that decide which built-in layers apply.
+#[derive(Default)]
+pub struct Overrides<'a> {
+    pub theme: Option<&'a str>,
+    pub no_icons: bool,
+    pub no_color: bool,
+}
+
 /// Loads `path`, or the user config at the XDG location when there is one,
 /// layered over the built-in defaults.
-pub fn load(path: Option<&Path>, theme: Option<&str>, no_icons: bool) -> Result<Config, String> {
+pub fn load(path: Option<&Path>, overrides: &Overrides) -> Result<Config, String> {
     let dir = config_dir();
     let path = path.map(Path::to_path_buf).or_else(|| {
         dir.as_ref()
@@ -232,7 +241,7 @@ pub fn load(path: Option<&Path>, theme: Option<&str>, no_icons: bool) -> Result<
             .filter(|p| p.is_file())
     });
     let user = path.as_deref().map(read).transpose()?;
-    build(user, dir.as_deref(), theme, no_icons).map_err(|e| match &path {
+    build(user, dir.as_deref(), overrides).map_err(|e| match &path {
         Some(p) => format!("{}: {e}", p.display()),
         None => e,
     })
@@ -246,12 +255,7 @@ pub fn config_dir() -> Option<PathBuf> {
     Some(base.join("marustdown"))
 }
 
-fn build(
-    user: Option<Table>,
-    dir: Option<&Path>,
-    theme: Option<&str>,
-    no_icons: bool,
-) -> Result<Config, String> {
+fn build(user: Option<Table>, dir: Option<&Path>, overrides: &Overrides) -> Result<Config, String> {
     let setting = |section: Option<&str>, key: &str| {
         let table = user.as_ref()?;
         let table = match section {
@@ -260,11 +264,14 @@ fn build(
         };
         table.get(key).cloned()
     };
-    let icons = !no_icons
-        && setting(Some("layout"), "icons")
+    let enabled = |key| {
+        setting(Some("layout"), key)
             .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-    let theme = match (theme, setting(None, "theme")) {
+            .unwrap_or(true)
+    };
+    let icons = !overrides.no_icons && enabled("icons");
+    let color = !overrides.no_color && enabled("color");
+    let theme = match (overrides.theme, setting(None, "theme")) {
         (Some(t), _) => t.to_owned(),
         (None, Some(Value::String(s))) => s,
         (None, Some(_)) => return Err("theme: expected a string".into()),
@@ -276,12 +283,16 @@ fn build(
     if !icons {
         merge(&mut merged, parse(ASCII));
     }
+    if !color {
+        merge(&mut merged, parse(NO_COLOR));
+    }
     if let Some(user) = user {
         merge(&mut merged, user);
     }
     merged.remove("theme");
     let mut cfg: Config = merged.try_into().map_err(|e| e.to_string())?;
     cfg.layout.icons = icons;
+    cfg.layout.color = color;
     Ok(cfg)
 }
 
@@ -320,7 +331,7 @@ fn merge(base: &mut Table, over: Table) {
 
 #[cfg(test)]
 pub fn defaults() -> Config {
-    build(None, None, None, false).unwrap()
+    build(None, None, &Overrides::default()).unwrap()
 }
 
 #[cfg(test)]
@@ -328,7 +339,7 @@ mod tests {
     use super::*;
 
     fn user(text: &str) -> Result<Config, String> {
-        build(Some(text.parse().unwrap()), None, None, false)
+        build(Some(text.parse().unwrap()), None, &Overrides::default())
     }
 
     #[test]
@@ -358,9 +369,30 @@ mod tests {
         let light = user("theme = \"light\"").unwrap();
         assert_eq!(light.colors["accent"], ColorValue::Name("#1e66f5".into()));
         assert!(user("theme = \"nope\"").is_err());
-        let ascii = build(None, None, None, true).unwrap();
+        let no_icons = Overrides {
+            no_icons: true,
+            ..Overrides::default()
+        };
+        let ascii = build(None, None, &no_icons).unwrap();
         assert_eq!(ascii.glyphs.task_done, "[x]");
         assert!(!ascii.layout.icons);
+    }
+
+    #[test]
+    fn no_color_reverses_the_cursor() {
+        assert!(!defaults().styles.cursor.reverse);
+        let no_color = Overrides {
+            no_color: true,
+            ..Overrides::default()
+        };
+        let cfg = build(None, None, &no_color).unwrap();
+        assert!(cfg.styles.cursor.reverse);
+        assert!(!cfg.layout.color);
+        let from_file = user("[layout]\ncolor = false").unwrap();
+        assert!(from_file.styles.cursor.reverse);
+        let overridden =
+            user("[layout]\ncolor = false\n[styles.cursor]\nreverse = false\nbold = true").unwrap();
+        assert!(!overridden.styles.cursor.reverse && overridden.styles.cursor.bold);
     }
 
     #[test]
