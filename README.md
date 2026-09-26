@@ -4,34 +4,7 @@ A fast terminal markdown viewer. It renders GitHub-flavored markdown with real
 typography (headings, code boxes with syntax highlighting, tables, alerts, task lists)
 in a full-screen pager, and every color, glyph and key can be changed in one TOML file.
 
-```
-     ██ Usage
-     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-     Run the server with your config file. See the configuration↗
-     section for all options.
-
-     ╭─ rust ──────────────────────────────────────── [y] copy ─╮
-     │ 1  fn main() {                                           │
-     │ 2      let cfg = Config::load("app.toml")?;              │
-     │ 3      server::run(cfg).await                            │
-     │ 4  }                                                     │
-     ╰──────────────────────────────────────────────────────────╯
-
-     ▌ 󰋽 NOTE
-     ▌ Requires Rust 1.80 or newer.
-
-     ┌──────────┬─────────┬──────────────────────────┐
-     │ Flag     │ Default │ Description              │
-     ├──────────┼─────────┼──────────────────────────┤
-     │ --port   │ 8080    │ Port to listen on        │
-     └──────────┴─────────┴──────────────────────────┘
-
-     ✔ Write docs
-     ☐ Add tests
-
- ln 12/40 │ Usage › Install        / search  n next  x toggle  o outline  q quit
-```
+![marustdown: highlighted code, checking off a task, and jumping through the outline](docs/screenshots/demo.gif)
 
 ## Features
 
@@ -54,6 +27,15 @@ in a full-screen pager, and every color, glyph and key can be changed in one TOM
 - **Fast and small**: memory-mapped input and a flat three-buffer layout with no
   per-line allocations. Highlighting is cached per code block, so resizing never
   re-highlights. The release binary is about 3 MB.
+
+## Screenshots
+
+| Syntax highlighting | Task lists | Outline |
+|---|---|---|
+| ![A Rust code block with line numbers and highlighting](docs/screenshots/code.png) | ![A task checked off from the pager](docs/screenshots/tasks.png) | ![The outline picker listing the document's headings](docs/screenshots/outline.png) |
+
+The screenshots are generated with [VHS](https://github.com/charmbracelet/vhs): run
+`cargo build --release && vhs docs/demo.tape` to regenerate them.
 
 ## Install
 
