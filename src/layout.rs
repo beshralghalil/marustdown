@@ -1200,13 +1200,18 @@ mod tests {
     }
 
     #[test]
-    fn sample_document_invariants() {
-        let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/data/sample.md"))
-            .unwrap();
-        for width in [20, 60, 90] {
-            let doc = layout(&src, width);
-            check_invariants(&doc);
-            assert!((0..doc.len()).all(|i| doc.line(i).0.width() <= width.max(30)));
+    fn docs_invariants() {
+        let docs = [
+            include_str!("../README.md"),
+            include_str!("../docs/configuration.md"),
+            include_str!("../docs/demo.md"),
+        ];
+        for src in docs {
+            for width in [20, 60, 90] {
+                let doc = layout(src, width);
+                check_invariants(&doc);
+                assert!((0..doc.len()).all(|i| doc.line(i).0.width() <= width.max(30)));
+            }
         }
     }
 }

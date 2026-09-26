@@ -143,9 +143,9 @@ mod tests {
             Target::External("mailto:a@b.c")
         );
         assert_eq!(
-            classify("../plan.md#files", Some(base)),
+            classify("../guide.md#files", Some(base)),
             Target::Local {
-                path: "/docs/../plan.md".into(),
+                path: "/docs/../guide.md".into(),
                 anchor: Some("files")
             }
         );
