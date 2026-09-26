@@ -2,8 +2,14 @@
 name = "marustdown"
 version = "0.1.0"
 edition = "2024"
-description = "A fast, configurable terminal markdown viewer"
+rust-version = "1.88"
+description = "A fast, configurable terminal markdown viewer with syntax highlighting, task toggling and keyboard link following"
+authors = ["Beshr Alghalil <beshr.alghalil@gmail.com>"]
 license = "MIT"
+readme = "README.md"
+keywords = ["markdown", "terminal", "viewer", "pager", "cli"]
+categories = ["command-line-utilities", "text-processing"]
+include = ["/src", "/assets", "/docs/*.md", "/README.md", "/LICENSE"]
 
 [[bin]]
 name = "mar"
@@ -21,7 +27,7 @@ two-face = { version = "0.5", default-features = false, features = ["syntect-oni
 unicode-width = "0.2"
 
 [profile.release]
-opt-level = "s"
+opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
