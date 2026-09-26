@@ -32,3 +32,7 @@ lto = true
 codegen-units = 1
 strip = true
 panic = "abort"
+
+[dev-dependencies]
+clap_complete = "4.6.11"
+clap_mangen = "0.3.3"

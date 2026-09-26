@@ -1,3 +1,4 @@
+mod cli;
 mod config;
 mod doc;
 mod highlight;
@@ -13,52 +14,16 @@ mod theme;
 mod wrap;
 
 use std::io::{self, IsTerminal};
-use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::error::ErrorKind;
-use clap::{CommandFactory, Parser, ValueEnum};
+use clap::{CommandFactory, Parser};
 
+use cli::{Args, ColorMode};
 use doc::Document;
 use keys::Keymap;
 use source::Source;
 use theme::Theme;
-
-/// A terminal markdown viewer.
-#[derive(Parser)]
-#[command(version)]
-struct Args {
-    /// Markdown file to view; `-` or nothing reads stdin
-    file: Option<PathBuf>,
-    /// Print the rendered document and exit instead of paging (automatic when stdout isn't a terminal)
-    #[arg(long)]
-    cat: bool,
-    /// When to style printed output: `auto` styles only when writing to a terminal
-    #[arg(long, value_enum, value_name = "WHEN", default_value_t = ColorMode::Auto)]
-    color: ColorMode,
-    /// Maximum content width in columns
-    #[arg(long, value_name = "N")]
-    width: Option<usize>,
-    /// Color preset: dark, light, ansi, or a theme file name
-    #[arg(long, value_name = "NAME")]
-    theme: Option<String>,
-    /// Same as `--color never` (NO_COLOR is honored too)
-    #[arg(long)]
-    no_color: bool,
-    /// Use ASCII glyphs instead of icons
-    #[arg(long)]
-    no_icons: bool,
-    /// Config file to use instead of $XDG_CONFIG_HOME/marustdown/config.toml
-    #[arg(long, value_name = "PATH")]
-    config: Option<PathBuf>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum ColorMode {
-    Auto,
-    Always,
-    Never,
-}
 
 fn main() -> ExitCode {
     match run(Args::parse()) {

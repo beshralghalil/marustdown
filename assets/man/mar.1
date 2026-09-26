@@ -1,0 +1,71 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH mar 1  "mar 0.1.0" 
+.SH NAME
+mar \- A fast, configurable terminal markdown viewer
+.SH SYNOPSIS
+\fBmar\fR [\fB\-\-cat\fR] [\fB\-\-color\fR] [\fB\-\-width\fR] [\fB\-\-theme\fR] [\fB\-\-no\-color\fR] [\fB\-\-no\-icons\fR] [\fB\-\-config\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIFILE\fR] 
+.SH DESCRIPTION
+Render GitHub\-flavored markdown in a full\-screen pager, with syntax\-highlighted code, task lists you can check off, keyboard link following and an outline. When stdout isn\*(Aqt a terminal, the rendered document is printed instead.
+.SH OPTIONS
+.TP
+\fB\-\-cat\fR
+Print the rendered document and exit instead of paging (automatic when stdout isn\*(Aqt a terminal)
+.TP
+\fB\-\-color\fR \fI<WHEN>\fR [default: auto]
+When to style printed output: `auto` styles only when writing to a terminal
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+auto
+.IP \(bu 2
+always
+.IP \(bu 2
+never
+.RE
+.TP
+\fB\-\-width\fR \fI<N>\fR
+Maximum content width in columns
+.TP
+\fB\-\-theme\fR \fI<NAME>\fR
+Color preset: dark, light, ansi, or a theme file name
+.TP
+\fB\-\-no\-color\fR
+Same as `\-\-color never` (NO_COLOR is honored too)
+.TP
+\fB\-\-no\-icons\fR
+Use ASCII glyphs instead of icons
+.TP
+\fB\-\-config\fR \fI<PATH>\fR
+Config file to use instead of $XDG_CONFIG_HOME/marustdown/config.toml
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIFILE\fR]
+Markdown file to view; `\-` or nothing reads stdin
+.SH EXTRA
+Keys:
+  j/k, Up/Down     move the cursor
+  Space/b          page down / up
+  ]] / [[          next / previous heading
+  /  n  N          search, next / previous match
+  x                toggle the task under the cursor (saved to the file)
+  f                tag visible links; type a tag to open it, uppercase to copy the URL
+  Tab / Enter      select / open a link
+  Backspace        back to the previous file
+  o                outline
+  y                copy the code block
+  e                edit in $VISUAL or $EDITOR
+  q                quit
+
+Configuration: $XDG_CONFIG_HOME/marustdown/config.toml (usually ~/.config/marustdown/config.toml).
+Reference: https://github.com/beshralghalil/marustdown/blob/main/docs/configuration.md
+.SH VERSION
+v0.1.0
