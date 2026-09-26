@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/beshralghalil/marustdown/compare/v0.1.0...v0.1.1) - 2026-09-26
+
+### Fixed
+
+- show the cursor line in reverse video when colors are off
+
 ## [0.1.0](https://github.com/beshralghalil/marustdown/releases/tag/v0.1.0) - 2026-09-26
 
 ### Added
