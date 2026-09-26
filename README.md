@@ -1,8 +1,11 @@
 # marustdown
 
+[![CI](https://github.com/beshralghalil/marustdown/actions/workflows/ci.yml/badge.svg)](https://github.com/beshralghalil/marustdown/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/marustdown.svg)](https://crates.io/crates/marustdown)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A fast terminal markdown viewer. It renders GitHub-flavored markdown with real
-typography (headings, code boxes with syntax highlighting, tables, alerts, task lists)
-in a full-screen pager, and every color, glyph and key can be changed in one TOML file.
+typography.
 
 ![marustdown: highlighted code, checking off a task, and jumping through the outline](docs/screenshots/demo.gif)
 
@@ -39,15 +42,31 @@ The screenshots are generated with [VHS](https://github.com/charmbracelet/vhs): 
 
 ## Install
 
-Requires Rust 1.88 or newer and a C compiler, which builds the Oniguruma regex engine
-that syntect uses.
+Prebuilt static binaries for Linux (x86_64 and aarch64) run on any distro:
 
 ```sh
-cargo install --path .
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/beshralghalil/marustdown/releases/latest/download/marustdown-installer.sh | sh
 ```
 
-This installs the `mar` binary. Alert icons use [Nerd Font](https://www.nerdfonts.com/)
-glyphs; without one, run with `--no-icons` or set `icons = false`.
+Other ways:
+
+```sh
+cargo binstall marustdown        # prebuilt binary through cargo-binstall
+cargo install marustdown --locked  # build from source: Rust 1.88+ and a C compiler
+```
+
+You can also download an archive from [Releases](https://github.com/beshralghalil/marustdown/releases)
+and put `mar` on your `PATH`. Each archive also contains the man page and shell completions:
+
+| File | Install to |
+|---|---|
+| `mar.1` | `~/.local/share/man/man1/` |
+| `completions/mar.bash` | `~/.local/share/bash-completion/completions/mar` |
+| `completions/_mar` | a directory in your zsh `$fpath` |
+| `completions/mar.fish` | `~/.config/fish/completions/` |
+
+Alert icons use [Nerd Font](https://www.nerdfonts.com/) glyphs. Without one, run
+`mar --no-icons` or set `icons = false`.
 
 ## Usage
 
