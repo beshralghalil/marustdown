@@ -1,11 +1,3 @@
-# Keeps a release PR open with the next version and changelog. Merging it
-# publishes to crates.io and pushes the vX.Y.Z tag, which starts release.yml (dist).
-#
-# Secrets:
-#   RELEASE_PLZ_TOKEN     fine-grained PAT for this repo: Contents + Pull requests (read/write).
-#                         The default GITHUB_TOKEN can't be used: tags it pushes don't trigger workflows.
-#   CARGO_REGISTRY_TOKEN  crates.io API token with publish-new and publish-update scopes.
-
 name: Release-plz
 
 on:

@@ -3,7 +3,6 @@ targets = ["x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl"]
 
 [advisories]
 yanked = "deny"
-# Transitive unmaintained crates can't be fixed here; vulnerabilities always fail.
 unmaintained = "workspace"
 
 [licenses]
