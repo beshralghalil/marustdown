@@ -1,0 +1,15 @@
+[colors]
+accent = 4
+secondary = 5
+subtle = 7
+overlay = 8
+muted = 8
+surface = "default"
+highlight = 0
+blue = 4
+green = 2
+yellow = 3
+orange = 11
+red = 1
+purple = 5
+teal = 6

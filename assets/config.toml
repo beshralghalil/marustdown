@@ -1,0 +1,121 @@
+# marustdown configuration
+#
+# Location: $XDG_CONFIG_HOME/marustdown/config.toml (usually ~/.config/marustdown/config.toml)
+# Every key is optional. Whatever you leave out keeps the value shown here, and
+# tables merge key by key, so `[styles.h1] fg = "red"` keeps h1 bold.
+
+# Color preset: "dark", "light", "ansi" (follows your terminal's own 16 colors),
+# or the name of a file in $XDG_CONFIG_HOME/marustdown/themes/<name>.toml that
+# holds a [colors] table (and optionally anything else from this file).
+theme = "dark"
+
+[layout]
+width = 90           # maximum content width in columns
+margin = 2           # minimum columns kept free on each side
+center = true        # center content; when false it is indented by `margin`
+line_numbers = true  # number the lines of code blocks
+tab_width = 4        # tab stop width inside code blocks
+scroll_off = 3       # lines kept visible above and below the cursor
+color = true         # false renders without colors (same as --no-color or NO_COLOR)
+icons = true         # false switches to the ASCII glyph set (same as --no-icons)
+status_bar = true    # show the status bar in the pager
+
+# Named colors are defined by the theme preset. You can override or add any here:
+#   [colors]
+#   accent = "#ff8800"   # "#rrggbb", "#rgb", 0-255 (terminal palette) or "default"
+[colors]
+
+# Every style is an inline table with any of:
+#   fg, bg     a color name from [colors], a literal color, or "default"
+#   bold, dim, italic, underline, strike, reverse   true / false
+[styles]
+text = {}
+h1 = { fg = "accent", bold = true }
+h2 = { fg = "secondary", bold = true }
+h3 = { bold = true }
+h4 = { fg = "subtle", bold = true }
+h5 = { fg = "overlay", bold = true }
+h6 = { fg = "muted", bold = true }
+strong = { bold = true }
+emphasis = { italic = true }
+strike = { strike = true }
+code = { fg = "accent", bg = "surface" }
+link = { fg = "accent", underline = true }
+link_icon = { fg = "muted" }
+image = { fg = "muted" }
+quote = { fg = "subtle", italic = true }
+quote_bar = { fg = "muted" }
+alert_note = { fg = "blue", bold = true }
+alert_tip = { fg = "green", bold = true }
+alert_important = { fg = "purple", bold = true }
+alert_warning = { fg = "yellow", bold = true }
+alert_caution = { fg = "red", bold = true }
+bullet = { fg = "accent" }
+number = { fg = "accent" }
+task_done = { fg = "green" }
+task_todo = { fg = "muted" }
+rule = { fg = "muted" }
+code_block = { bg = "surface" }
+code_border = { fg = "muted" }
+code_label = { fg = "subtle" }
+line_number = { fg = "muted" }
+table_border = { fg = "muted" }
+table_header = { bold = true }
+syntax_keyword = { fg = "purple", bold = true }
+syntax_string = { fg = "green" }
+syntax_number = { fg = "orange" }
+syntax_comment = { fg = "muted", italic = true }
+syntax_type = { fg = "yellow" }
+cursor = { bg = "highlight" }
+status = { fg = "subtle", bg = "surface" }
+search = { fg = "yellow", bold = true, reverse = true }
+outline_level = { fg = "muted" }
+
+# Glyphs use single-column characters unless noted. An empty string hides the element.
+# The defaults use Nerd Font icons for alerts; set `icons = false` for plain ASCII.
+[glyphs]
+heading = ["██", "▌", "", "", "", ""]        # marker before h1..h6
+heading_rule = ["━", "─", "", "", "", ""]    # rule drawn under h1..h6
+bullets = ["•", "◦", "▪"]                    # by nesting depth, repeating
+task_done = "✔"
+task_todo = "☐"
+quote = "▌"
+link = "↗"
+image = "🖼"
+rule = "─"
+ellipsis = "…"
+code_copy = "[y] copy"
+code_box = ["╭", "─", "╮", "│", "╰", "╯"]    # top-left, horizontal, top-right, vertical, bottom-left, bottom-right
+table_box = ["┌", "┬", "┐", "├", "┼", "┤", "└", "┴", "┘", "│", "─"]  # top, middle and bottom rows (left, cross, right), vertical, horizontal
+alert_note = "\U000F02FD NOTE"
+alert_tip = " TIP"
+alert_important = " IMPORTANT"
+alert_warning = " WARNING"
+alert_caution = " CAUTION"
+breadcrumb = " › "
+separator = " │ "
+
+# Key bindings. Each action takes a list of keys:
+#   a character ("j", "G", "/"), a sequence of characters ("]]"),
+#   a named key (up, down, left, right, pageup, pagedown, home, end, enter,
+#   esc, tab, backtab, backspace, delete, space) or a modifier combo ("ctrl-d", "alt-x").
+# Ctrl-C always quits.
+[keys]
+down = ["j", "down"]
+up = ["k", "up"]
+page_down = ["space", "f", "pagedown"]
+page_up = ["b", "pageup"]
+half_down = ["d", "ctrl-d"]
+half_up = ["u", "ctrl-u"]
+top = ["g", "home"]
+bottom = ["G", "end"]
+next_heading = ["]]"]
+prev_heading = ["[["]
+search = ["/"]
+next_match = ["n"]
+prev_match = ["N"]
+toggle = ["x", "enter"]
+copy = ["y"]
+outline = ["o"]
+edit = ["e"]
+quit = ["q", "esc"]

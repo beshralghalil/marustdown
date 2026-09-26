@@ -1,0 +1,20 @@
+[glyphs]
+heading = ["#", "##", "###", "####", "#####", "######"]
+heading_rule = ["=", "-", "", "", "", ""]
+bullets = ["*", "-", "+"]
+task_done = "[x]"
+task_todo = "[ ]"
+quote = "|"
+link = ""
+image = "[img]"
+rule = "-"
+ellipsis = "~"
+code_box = ["+", "-", "+", "|", "+", "+"]
+table_box = ["+", "+", "+", "+", "+", "+", "+", "+", "+", "|", "-"]
+alert_note = "NOTE"
+alert_tip = "TIP"
+alert_important = "IMPORTANT"
+alert_warning = "WARNING"
+alert_caution = "CAUTION"
+breadcrumb = " > "
+separator = " | "
