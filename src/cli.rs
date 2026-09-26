@@ -92,9 +92,15 @@ mod tests {
     #[test]
     fn man_page_and_completions_are_current() {
         let mut man = Vec::new();
-        clap_mangen::Man::new(Args::command()).render(&mut man).unwrap();
+        clap_mangen::Man::new(Args::command())
+            .render(&mut man)
+            .unwrap();
         check("assets/man/mar.1", &man);
-        for (shell, file) in [(Shell::Bash, "mar.bash"), (Shell::Zsh, "_mar"), (Shell::Fish, "mar.fish")] {
+        for (shell, file) in [
+            (Shell::Bash, "mar.bash"),
+            (Shell::Zsh, "_mar"),
+            (Shell::Fish, "mar.fish"),
+        ] {
             let mut out = Vec::new();
             generate(shell, &mut Args::command(), "mar", &mut out);
             check(&format!("assets/completions/{file}"), &out);
