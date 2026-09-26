@@ -271,14 +271,13 @@ fn build(user: Option<Table>, dir: Option<&Path>, overrides: &Overrides) -> Resu
     };
     let icons = !overrides.no_icons && enabled("icons");
     let color = !overrides.no_color && enabled("color");
+    let mut merged = parse(DEFAULT);
     let theme = match (overrides.theme, setting(None, "theme")) {
         (Some(t), _) => t.to_owned(),
         (None, Some(Value::String(s))) => s,
         (None, Some(_)) => return Err("theme: expected a string".into()),
-        (None, None) => "dark".into(),
+        (None, None) => merged["theme"].as_str().expect("built-in theme").to_owned(),
     };
-
-    let mut merged = parse(DEFAULT);
     merge(&mut merged, preset(&theme, dir)?);
     if !icons {
         merge(&mut merged, parse(ASCII));
@@ -346,7 +345,7 @@ mod tests {
     fn defaults_parse() {
         let cfg = defaults();
         assert_eq!(cfg.layout.width, 90);
-        assert!(cfg.colors.contains_key("accent"));
+        assert_eq!(cfg.colors["accent"], ColorValue::Index(4));
     }
 
     #[test]
