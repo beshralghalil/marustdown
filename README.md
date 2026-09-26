@@ -48,7 +48,8 @@ in a full-screen pager, and every color, glyph and key can be changed in one TOM
   definitions from two-face. Colors come from your theme, not from a separate
   highlighting theme.
 - **Clickable links** (OSC 8) in terminals that support them.
-- **Cat mode**: styled output to stdout, used automatically when the output is piped.
+- **Cat mode** prints the rendered document to stdout, and is used automatically when
+  output is piped or redirected. Output is styled on a terminal and plain text otherwise.
 - **Fully configurable**: themes, per-element styles, glyphs, layout and key bindings.
 - **Fast and small**: memory-mapped input and a flat three-buffer layout with no
   per-line allocations. Highlighting is cached per code block, so resizing never
@@ -70,17 +71,19 @@ glyphs; without one, run with `--no-icons` or set `icons = false`.
 
 ```sh
 mar README.md            # page a file
-mar README.md --cat      # print styled output and exit
+mar README.md --cat      # print the rendered document and exit
 cat notes.md | mar       # read stdin (`mar -` works too)
-mar doc.md | less -R     # piping switches to cat mode automatically
+mar doc.md > doc.txt     # redirected output is plain, readable text
+mar --color always doc.md | less -R   # keep the styling when piping
 ```
 
 | Option | |
 |---|---|
 | `--cat` | Print and exit instead of paging |
+| `--color <WHEN>` | `auto` (default: styled only on a terminal), `always`, or `never` |
 | `--width <N>` | Maximum content width (default 90) |
 | `--theme <NAME>` | `dark`, `light`, `ansi`, or a custom theme file |
-| `--no-color` | Plain text; `NO_COLOR` is honored too |
+| `--no-color` | Same as `--color never`; `NO_COLOR` also turns colors off |
 | `--no-icons` | ASCII glyphs instead of Unicode and Nerd Font icons |
 | `--config <PATH>` | Use this config file instead of the default location |
 

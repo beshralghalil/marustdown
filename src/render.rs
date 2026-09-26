@@ -70,16 +70,22 @@ pub fn styled(theme: &Theme, style: Style, s: &str, out: &mut String) {
     pen.finish();
 }
 
-/// Streams the whole document in bounded chunks.
+/// Streams the whole document in bounded chunks; `plain` writes bare text with no
+/// escape sequences at all, for files and pipes.
 pub fn cat(
     doc: &Document,
     theme: &Theme,
     margin: usize,
+    plain: bool,
     out: &mut impl io::Write,
 ) -> io::Result<()> {
     let mut buf = String::with_capacity(CHUNK + 4096);
     for i in 0..doc.len() {
-        if !doc.line(i).0.is_empty() {
+        let text = doc.line(i).0;
+        if plain && !text.trim_end().is_empty() {
+            pad(&mut buf, margin);
+            buf.push_str(text.trim_end());
+        } else if !plain && !text.is_empty() {
             pad(&mut buf, margin);
             line(doc, i, theme, &Decor::default(), &mut buf);
         }
@@ -347,6 +353,24 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn plain_cat_has_no_escapes() {
+        let theme = test_theme();
+        let mut doc = Document::new();
+        doc.layout(
+            "# Title\n\n**bold** [link](u) `code`\n\n- [ ] task",
+            30,
+            &theme,
+        );
+        let mut out = Vec::new();
+        cat(&doc, &theme, 0, true, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains('\x1b'));
+        assert!(text.starts_with("██ Title\n"));
+        assert!(text.contains("bold link↗  code"));
+        assert!(text.lines().all(|l| l == l.trim_end()));
     }
 
     #[test]
