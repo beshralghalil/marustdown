@@ -1,0 +1,6 @@
+[workspace]
+# Publish only when a release PR is merged, never on ordinary pushes to main.
+release_always = false
+# dist creates the GitHub Release (binaries, installer, notes) from the tag.
+git_release_enable = false
+changelog_update = true

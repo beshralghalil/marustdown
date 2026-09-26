@@ -1,0 +1,56 @@
+# Keeps a release PR open with the next version and changelog. Merging it
+# publishes to crates.io and pushes the vX.Y.Z tag, which starts release.yml (dist).
+#
+# Secrets:
+#   RELEASE_PLZ_TOKEN     fine-grained PAT for this repo: Contents + Pull requests (read/write).
+#                         The default GITHUB_TOKEN can't be used: tags it pushes don't trigger workflows.
+#   CARGO_REGISTRY_TOKEN  crates.io API token with publish-new and publish-update scopes.
+
+name: Release-plz
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    name: Publish and tag
+    if: github.repository_owner == 'beshralghalil'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  release-pr:
+    name: Open release PR
+    if: github.repository_owner == 'beshralghalil'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
