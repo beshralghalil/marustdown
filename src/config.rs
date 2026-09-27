@@ -39,6 +39,7 @@ pub struct Layout {
     pub icons: bool,
     pub status_bar: bool,
     pub math: bool,
+    pub diagrams: bool,
 }
 
 impl Layout {
@@ -131,6 +132,8 @@ fields!(Styles {
     strike,
     code,
     math,
+    diagram,
+    diagram_border,
     link,
     link_icon,
     image,

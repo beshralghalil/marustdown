@@ -22,6 +22,11 @@ typography.
 - **Copy code blocks** to the system clipboard with OSC 52, which also works over SSH.
 - **Math**: `$…$` and `$$…$$` LaTeX is rendered as Unicode, like `x² + yᵢ`, `∑ᵢ₌₁ⁿ` or
   `√(x + 1)`, with matrices and cases drawn over several lines.
+- **Mermaid diagrams**: ```` ```mermaid ```` blocks are drawn with box-drawing characters:
+  flowcharts, sequence, state, class, pie, gantt and more. Diagrams that fail to parse
+  show their source.
+- **Horizontal scrolling**: code blocks, diagrams and formulas wider than the screen
+  scroll sideways under the cursor instead of being cut off.
 - **Syntax highlighting** for about 220 languages, using syntect with bat's syntax
   definitions from two-face. Colors come from your theme, not from a separate
   highlighting theme.
@@ -29,9 +34,9 @@ typography.
 - **Cat mode** prints the rendered document to stdout, and is used automatically when
   output is piped or redirected. Output is styled on a terminal and plain text otherwise.
 - **Fully configurable**: themes, per-element styles, glyphs, layout and key bindings.
-- **Fast and small**: memory-mapped input and a flat three-buffer layout with no
+- **Fast**: memory-mapped input and a flat three-buffer layout with no
   per-line allocations. Highlighting is cached per code block, so resizing never
-  re-highlights. The release binary is about 3 MB.
+  re-highlights.
 
 ## Screenshots
 
@@ -54,7 +59,7 @@ Other ways:
 
 ```sh
 cargo binstall marustdown        # prebuilt binary through cargo-binstall
-cargo install marustdown --locked  # build from source: Rust 1.88+ and a C compiler
+cargo install marustdown --locked  # build from source: Rust 1.92+ and a C compiler
 ```
 
 You can also download an archive from [Releases](https://github.com/beshralghalil/marustdown/releases)

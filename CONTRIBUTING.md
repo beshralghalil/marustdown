@@ -27,7 +27,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-plus a build with the minimum Rust version (1.88), a static musl release build, and
+plus a build with the minimum Rust version (1.92), a static musl release build, and
 `cargo deny check` (see `deny.toml`).
 
 ## Commit messages

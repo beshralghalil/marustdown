@@ -12,7 +12,7 @@ use crate::config::Styles;
 use crate::doc::{Document, Task};
 use crate::highlight::{self, Span, Token};
 use crate::theme::{Style, Theme};
-use crate::{links, math, table, wrap};
+use crate::{diagram, links, math, table, wrap};
 
 const OPTIONS: Options = Options::ENABLE_TABLES
     .union(Options::ENABLE_STRIKETHROUGH)
@@ -726,12 +726,32 @@ impl<'a, 'd> Builder<'a, 'd> {
         if std::mem::take(&mut self.gap) {
             self.out.gap();
         }
-        self.centered_block(&math::display(tex), style);
+        self.centered_block(&math::display(tex), style, None);
         self.gap = true;
     }
 
+    /// Draws a ```mermaid block as a diagram; false when it can't be rendered.
+    fn diagram(&mut self) -> bool {
+        let code = std::mem::take(&mut self.code);
+        let body = code.strip_suffix('\n').unwrap_or(&code);
+        let Some(lines) = diagram::render(body, self.out.avail(), !self.theme.layout.icons) else {
+            self.code = code;
+            return false;
+        };
+        let s = &self.theme.styles;
+        let first = self.out.line();
+        self.centered_block(&lines, s.diagram, Some(s.diagram_border));
+        let last = self.out.line() - 1;
+        self.out.doc.push_code(body, first, last);
+        self.code = code;
+        self.code.clear();
+        self.in_code = false;
+        true
+    }
+
     /// Lines centered as one block, or a scrollable wide block when they don't fit.
-    fn centered_block(&mut self, lines: &[String], style: Style) {
+    /// With `line_style`, diagram lines and arrows get it instead of `style`.
+    fn centered_block(&mut self, lines: &[String], style: Style, line_style: Option<Style>) {
         let avail = self.out.avail();
         let width = lines
             .iter()
@@ -748,12 +768,12 @@ impl<'a, 'd> Builder<'a, 'd> {
             self.out.begin_line();
             if wide {
                 let start = self.out.doc.col();
-                self.out.doc.push(&self.norm[..cut], style);
+                push_styled(self.out.doc, &self.norm[..cut], style, line_style);
                 self.out.doc.pad(width - used, Style::default());
                 self.out.doc.mark_window(start, self.out.doc.col());
             } else {
                 self.out.doc.pad((avail - width) / 2, Style::default());
-                self.out.doc.push(&self.norm[..cut], style);
+                push_styled(self.out.doc, &self.norm[..cut], style, line_style);
             }
             self.out.end_line();
         }
@@ -773,6 +793,10 @@ impl<'a, 'd> Builder<'a, 'd> {
     }
 
     fn code_block(&mut self) {
+        if self.theme.layout.diagrams && self.lang.eq_ignore_ascii_case("mermaid") && self.diagram()
+        {
+            return;
+        }
         let Builder {
             out,
             theme,
@@ -989,6 +1013,26 @@ fn rule_row(out: &mut Out, widths: &[usize], [left, mid, right]: [&str; 3], h: &
             .push(if i + 1 == widths.len() { right } else { mid }, style);
     }
     out.end_line();
+}
+
+/// Pushes `text` in `style`, or with diagram lines and arrows in `line_style`.
+fn push_styled(doc: &mut Document, text: &str, style: Style, line_style: Option<Style>) {
+    let Some(line_style) = line_style else {
+        return doc.push(text, style);
+    };
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((_, c)) = chars.next() {
+        let line = diagram::is_line(c);
+        if chars
+            .peek()
+            .is_none_or(|&(_, n)| diagram::is_line(n) != line)
+        {
+            let end = chars.peek().map_or(text.len(), |&(j, _)| j);
+            doc.push(&text[start..end], if line { line_style } else { style });
+            start = end;
+        }
+    }
 }
 
 fn emit_code(doc: &mut Document, line: &str, spans: &[Span], s: &Styles<Style>) {
@@ -1270,6 +1314,49 @@ mod tests {
         let mut doc = Document::new();
         doc.layout("$x^2$ and $$y$$", 80, &Theme::new(cfg).unwrap());
         assert_eq!(plain(&doc), "$x^2$ and $$y$$");
+    }
+
+    #[test]
+    fn mermaid_blocks_become_diagrams() {
+        let src = "```mermaid\ngraph LR\n  A[Start] --> B[End]\n```";
+        let doc = layout(src, 60);
+        let text = plain(&doc);
+        assert!(text.contains("Start") && text.contains("End") && !text.contains("graph LR"));
+        assert_eq!(doc.code(0), "graph LR\n  A[Start] --> B[End]");
+        let row = (0..doc.len())
+            .find(|&i| doc.line(i).0.contains("Start"))
+            .unwrap();
+        let t = test_theme();
+        assert_eq!(style_of(&doc, row, "Start").fg, t.styles.diagram.fg);
+        assert_eq!(style_of(&doc, row, "│").fg, t.styles.diagram_border.fg);
+    }
+
+    #[test]
+    fn broken_diagrams_show_their_source() {
+        let doc = layout("```mermaid\nnot a diagram\n```", 40);
+        assert!(plain(&doc).contains("│ 1  not a diagram"));
+        let mut cfg = crate::config::defaults();
+        cfg.layout.diagrams = false;
+        let mut off = Document::new();
+        off.layout(
+            "```mermaid\ngraph LR\n  A --> B\n```",
+            40,
+            &Theme::new(cfg).unwrap(),
+        );
+        assert!(plain(&off).contains("graph LR"));
+    }
+
+    #[test]
+    fn wide_diagrams_scroll() {
+        let src = "```mermaid\ngraph LR\n  A[First step] --> B[Second step] --> C[Third step] --> D[Fourth step]\n```";
+        let doc = layout(src, 30);
+        let row = (0..doc.len())
+            .find(|&i| doc.line(i).0.contains("First"))
+            .unwrap();
+        let k = doc
+            .wide_at(row)
+            .expect("diagram wider than 30 columns scrolls");
+        assert!(doc.wides[k].width > doc.wides[k].view);
     }
 
     #[test]

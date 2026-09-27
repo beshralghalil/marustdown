@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod diagram;
 mod doc;
 mod highlight;
 mod keys;
