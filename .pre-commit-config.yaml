@@ -1,4 +1,4 @@
-exclude: ^assets/(man|completions)/
+exclude: ^(assets/(man|completions)|tests/stress)/
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
