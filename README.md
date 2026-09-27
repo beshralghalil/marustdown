@@ -40,9 +40,11 @@ typography.
 
 ## Screenshots
 
-| Syntax highlighting | Task lists | Outline |
-|---|---|---|
-| ![A Rust code block with line numbers and highlighting](docs/screenshots/code.png) | ![A task checked off from the pager](docs/screenshots/tasks.png) | ![The outline picker listing the document's headings](docs/screenshots/outline.png) |
+| Syntax highlighting | Task lists |
+|---|---|
+| ![A Rust code block with line numbers and highlighting](docs/screenshots/code.png) | ![A task checked off from the pager](docs/screenshots/tasks.png) |
+| **Math and diagrams** | **Outline** |
+| ![LaTeX formulas as Unicode and Mermaid diagrams drawn with box characters](docs/screenshots/math-diagrams.png) | ![The outline picker listing the document's headings](docs/screenshots/outline.png) |
 
 The screenshots are generated with [VHS](https://github.com/charmbracelet/vhs): run
 `cargo build --release && vhs docs/demo.tape` to regenerate them.
