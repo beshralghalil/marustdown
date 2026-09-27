@@ -40,6 +40,17 @@ pub struct Task {
     pub done: bool,
 }
 
+/// Lines `first..=last` whose scrolling part can be wider than the screen. Only `view`
+/// of its `width` columns are shown at a time, from a horizontal offset.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Wide {
+    pub first: u32,
+    pub last: u32,
+    pub view: u16,
+    pub width: u16,
+    windows: u32, // index of the first line's window
+}
+
 /// Laid-out text in three flat buffers: plain text, style runs, and line ends.
 #[derive(Default)]
 pub struct Document {
@@ -50,6 +61,8 @@ pub struct Document {
     pub headings: Vec<Heading>,
     pub code_blocks: Vec<CodeBlock>,
     pub tasks: Vec<Task>,
+    pub wides: Vec<Wide>,
+    windows: Vec<(u16, u16)>, // byte range of each wide line's scrolling part
     anchors: Vec<(u32, usize)>, // (line, source offset) at each block start
     code: String,
     slugs: String,
@@ -129,6 +142,22 @@ impl Document {
         Some(&self.tasks[k]).filter(|t| line < t.end as usize)
     }
 
+    /// Index of the wide block containing `line`.
+    pub fn wide_at(&self, line: usize) -> Option<usize> {
+        let k = self.wides.partition_point(|w| (w.last as usize) < line);
+        self.wides
+            .get(k)
+            .filter(|w| w.first as usize <= line)
+            .map(|_| k)
+    }
+
+    /// Byte range of the scrolling part of `line`, which belongs to wide block `k`.
+    pub fn window(&self, k: usize, line: usize) -> (usize, usize) {
+        let w = &self.wides[k];
+        let (start, end) = self.windows[w.windows as usize + line - w.first as usize];
+        (start as usize, end as usize)
+    }
+
     pub fn source_offset(&self, line: usize) -> usize {
         let k = self.anchors.partition_point(|a| a.0 as usize <= line);
         k.checked_sub(1).map_or(0, |k| self.anchors[k].1)
@@ -148,6 +177,8 @@ impl Document {
         self.headings.clear();
         self.code_blocks.clear();
         self.tasks.clear();
+        self.wides.clear();
+        self.windows.clear();
         self.anchors.clear();
         self.code.clear();
         self.slugs.clear();
@@ -185,6 +216,26 @@ impl Document {
             parent,
             title_at,
             slug_end,
+        });
+    }
+
+    /// Marks bytes `start..end` of the open line as its scrolling part.
+    pub(crate) fn mark_window(&mut self, start: usize, end: usize) {
+        let offset = |n: usize| u16::try_from(n).expect("wide line under 64 KiB");
+        self.windows.push((offset(start), offset(end)));
+    }
+
+    /// Closes a wide block over the lines marked since `first`.
+    pub(crate) fn push_wide(&mut self, first: u32, view: usize, width: usize) {
+        let last = self.lines.len() as u32 - 1;
+        let windows = (self.windows.len() - (last - first + 1) as usize) as u32;
+        let cols = |n: usize| n.min(u16::MAX as usize) as u16;
+        self.wides.push(Wide {
+            first,
+            last,
+            view: cols(view),
+            width: cols(width),
+            windows,
         });
     }
 

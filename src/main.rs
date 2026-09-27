@@ -61,6 +61,8 @@ fn run(args: Args) -> Result<(), String> {
     };
     if !paged {
         cfg.glyphs.code_copy.clear();
+        cfg.glyphs.overflow_left = cfg.glyphs.ellipsis.clone();
+        cfg.glyphs.overflow_right = cfg.glyphs.ellipsis.clone();
     }
     let theme = Theme::new(cfg)?;
     let keys = Keymap::new(&theme.keys)?;

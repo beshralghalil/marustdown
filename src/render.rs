@@ -1,6 +1,8 @@
 use std::fmt::Write as _;
 use std::io;
 
+use unicode_width::UnicodeWidthChar;
+
 use crate::doc::Document;
 use crate::search::Matcher;
 use crate::theme::{BOLD, DIM, ITALIC, Paint, REVERSE, STRIKE, Style, Theme, UNDERLINE};
@@ -23,6 +25,35 @@ pub struct Decor<'a> {
     pub search: Option<&'a Matcher>,    // hits split out of their runs
     pub select: Option<(usize, usize)>, // byte range of the selected link
     pub labels: &'a [(usize, &'a str)], // hint tags inserted before these offsets, sorted
+    pub window: Option<Window>,         // the visible part of a wide line
+    pub plain: bool,                    // text only, no escape sequences
+}
+
+/// The visible part of a wide line: bytes `start..end` scroll, and `view` of their
+/// `width` columns are shown from column `offset`.
+#[derive(Clone, Copy, Debug)]
+pub struct Window {
+    pub start: usize,
+    pub end: usize,
+    pub offset: usize,
+    pub view: usize,
+    pub width: usize,
+}
+
+impl Window {
+    /// Window of `line`, part of wide block `k`, scrolled to `offset` (clamped).
+    pub fn new(doc: &Document, k: usize, line: usize, offset: usize) -> Self {
+        let (start, end) = doc.window(k, line);
+        let (view, width) = (doc.wides[k].view as usize, doc.wides[k].width as usize);
+        let offset = offset.min(width.saturating_sub(view));
+        Window {
+            start,
+            end,
+            offset,
+            view,
+            width,
+        }
+    }
 }
 
 /// Writes line `i` as ANSI text.
@@ -30,12 +61,19 @@ pub fn line(doc: &Document, i: usize, theme: &Theme, decor: &Decor, out: &mut St
     let (text, runs) = doc.line(i);
     let s = &theme.styles;
     let mut pen = Pen::new(theme, &doc.links, out);
+    pen.plain = decor.plain;
     let mut hits = decor
         .search
         .into_iter()
         .flat_map(|m| m.matches(text))
         .peekable();
     let mut labels = decor.labels.iter().peekable();
+    let g = &theme.glyphs;
+    let mut clip = Clip {
+        window: decor.window,
+        col: 0,
+        marks: [&g.overflow_left, &g.overflow_right],
+    };
     for (k, run) in runs.iter().enumerate() {
         let at = run.at as usize;
         let end = runs.get(k + 1).map_or(text.len(), |n| n.at as usize);
@@ -56,11 +94,54 @@ pub fn line(doc: &Document, i: usize, theme: &Theme, decor: &Decor, out: &mut St
                 Some(&(s0, _)) if s0 < end => (s0, style),
                 _ => (end, style),
             };
-            pen.put(&text[pos..stop], style);
+            clip.put(&mut pen, pos, &text[pos..stop], style, s.overflow);
             pos = stop;
         }
     }
     pen.finish();
+}
+
+/// Crops the scrolling part of a wide line to its window, marking hidden content at
+/// the cut edges.
+struct Clip<'a> {
+    window: Option<Window>,
+    col: usize, // columns of the scrolling part written so far
+    marks: [&'a str; 2],
+}
+
+impl Clip<'_> {
+    fn put(&mut self, pen: &mut Pen, at: usize, s: &str, style: Style, mark: Style) {
+        let Some(w) = self.window.filter(|w| at < w.end && w.start < at + s.len()) else {
+            return pen.put(s, style);
+        };
+        let (a, b) = (w.start.saturating_sub(at), (w.end - at).min(s.len()));
+        pen.put(&s[..a], style);
+        let (lo, hi) = (w.offset, w.offset + w.view);
+        let (more_left, more_right) = (lo > 0, hi < w.width);
+        let mut buf = [0; 4];
+        for c in s[a..b].chars() {
+            let cw = c.width().unwrap_or(0);
+            let c0 = self.col;
+            self.col += cw;
+            let (from, to) = (c0.max(lo), (c0 + cw).min(hi));
+            if from >= to && !(cw == 0 && (lo..hi).contains(&c0)) {
+                continue;
+            }
+            let (left_edge, right_edge) = (from == lo && more_left, to == hi && more_right);
+            if left_edge || right_edge || from > c0 || to < c0 + cw {
+                for col in from..to {
+                    match (col == lo && left_edge, col + 1 == hi && right_edge) {
+                        (true, _) => pen.put(self.marks[0], style.over(mark)),
+                        (_, true) => pen.put(self.marks[1], style.over(mark)),
+                        _ => pen.put(" ", style),
+                    }
+                }
+            } else {
+                pen.put(c.encode_utf8(&mut buf), style);
+            }
+        }
+        pen.put(&s[b..], style);
+    }
 }
 
 /// Writes `s` in `style` followed by a reset.
@@ -82,12 +163,23 @@ pub fn cat(
     let mut buf = String::with_capacity(CHUNK + 4096);
     for i in 0..doc.len() {
         let text = doc.line(i).0;
-        if plain && !text.trim_end().is_empty() {
+        if !text.trim_end().is_empty() || (!plain && !text.is_empty()) {
             pad(&mut buf, margin);
-            buf.push_str(text.trim_end());
-        } else if !plain && !text.is_empty() {
-            pad(&mut buf, margin);
-            line(doc, i, theme, &Decor::default(), &mut buf);
+            let window = doc.wide_at(i).map(|k| Window::new(doc, k, i, 0));
+            line(
+                doc,
+                i,
+                theme,
+                &Decor {
+                    window,
+                    plain,
+                    ..Decor::default()
+                },
+                &mut buf,
+            );
+            if plain {
+                buf.truncate(buf.trim_end_matches(' ').len());
+            }
         }
         buf.push('\n');
         if buf.len() >= CHUNK {
@@ -138,6 +230,7 @@ struct Pen<'a> {
     out: &'a mut String,
     style: Style,
     link: u16,
+    plain: bool,
 }
 
 impl<'a> Pen<'a> {
@@ -148,10 +241,17 @@ impl<'a> Pen<'a> {
             out,
             style: Style::default(),
             link: 0,
+            plain: false,
         }
     }
 
     fn put(&mut self, s: &str, style: Style) {
+        if s.is_empty() {
+            return;
+        }
+        if self.plain {
+            return self.out.push_str(s);
+        }
         if style.link != self.link {
             if self.link != 0 {
                 self.out.push_str(OSC8_CLOSE);
@@ -212,6 +312,9 @@ impl<'a> Pen<'a> {
     }
 
     fn finish(self) {
+        if self.plain {
+            return;
+        }
         if self.link != 0 {
             self.out.push_str(OSC8_CLOSE);
         }
@@ -338,6 +441,59 @@ mod tests {
         let plain: String = strip(&out);
         assert_eq!(plain, "go ahere↗ now");
         assert!(out.contains("\x1b[1;7;"));
+    }
+
+    fn windowed(src: &str, width: usize, row: usize, offset: usize) -> String {
+        let theme = test_theme();
+        let mut doc = Document::new();
+        doc.layout(src, width, &theme);
+        let k = doc.wide_at(row).expect("wide line");
+        let window = Some(Window::new(&doc, k, row, offset));
+        let mut out = String::new();
+        line(
+            &doc,
+            row,
+            &theme,
+            &Decor {
+                window,
+                ..Decor::default()
+            },
+            &mut out,
+        );
+        strip(&out)
+    }
+
+    #[test]
+    fn plain_cat_clips_wide_blocks() {
+        let theme = test_theme();
+        let mut doc = Document::new();
+        doc.layout("```\nabcdefghijklmnopqrstuvwxyz\n```", 20, &theme);
+        let mut out = Vec::new();
+        cat(&doc, &theme, 0, true, &mut out).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(text.lines().nth(1), Some("│ 1  abcdefghijkl› │"));
+        assert!(!text.contains('\x1b'));
+    }
+
+    #[test]
+    fn window_crops_and_marks_hidden_content() {
+        let src = "```\nabcdefghijklmnopqrstuvwxyz\n```";
+        assert_eq!(windowed(src, 20, 1, 0), "│ 1  abcdefghijkl› │");
+        assert_eq!(windowed(src, 20, 1, 5), "│ 1  ‹ghijklmnopq› │");
+        assert_eq!(windowed(src, 20, 1, 99), "│ 1  ‹opqrstuvwxyz │");
+    }
+
+    #[test]
+    fn window_keeps_columns_across_wide_characters() {
+        let src = "```\n日本語日本語日本語日本語\n```";
+        for offset in 0..12 {
+            let out = windowed(src, 20, 1, offset);
+            assert_eq!(
+                unicode_width::UnicodeWidthStr::width(out.as_str()),
+                20,
+                "offset {offset}: {out}"
+            );
+        }
     }
 
     fn strip(s: &str) -> String {

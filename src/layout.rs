@@ -19,6 +19,9 @@ const OPTIONS: Options = Options::ENABLE_TABLES
     .union(Options::ENABLE_TASKLISTS)
     .union(Options::ENABLE_GFM);
 
+/// Columns kept of a scrollable line; the rest is dropped.
+const MAX_WIDE: usize = 4096;
+
 /// Lays `src` out into `doc` at `width` columns.
 pub fn build(
     doc: &mut Document,
@@ -723,24 +726,40 @@ impl<'a, 'd> Builder<'a, 'd> {
         if std::mem::take(&mut self.gap) {
             self.out.gap();
         }
+        self.centered_block(&math::display(tex), style);
+        self.gap = true;
+    }
+
+    /// Lines centered as one block, or a scrollable wide block when they don't fit.
+    fn centered_block(&mut self, lines: &[String], style: Style) {
         let avail = self.out.avail();
-        let lines = math::display(tex);
         let width = lines
             .iter()
             .map(|l| l.width())
             .max()
             .unwrap_or(0)
-            .min(avail);
-        for line in &lines {
+            .min(MAX_WIDE);
+        let wide = width > avail;
+        let first = self.out.line();
+        for line in lines {
             self.norm.clear();
             normalize(line, self.theme.layout.tab_width, &mut self.norm);
-            let cut = wrap::fit(&self.norm, avail).0;
+            let (cut, used) = wrap::fit(&self.norm, width);
             self.out.begin_line();
-            self.out.doc.pad((avail - width) / 2, Style::default());
-            self.out.doc.push(&self.norm[..cut], style);
+            if wide {
+                let start = self.out.doc.col();
+                self.out.doc.push(&self.norm[..cut], style);
+                self.out.doc.pad(width - used, Style::default());
+                self.out.doc.mark_window(start, self.out.doc.col());
+            } else {
+                self.out.doc.pad((avail - width) / 2, Style::default());
+                self.out.doc.push(&self.norm[..cut], style);
+            }
             self.out.end_line();
         }
-        self.gap = true;
+        if wide && self.out.line() > first {
+            self.out.doc.push_wide(first, avail, width);
+        }
     }
 
     fn rule(&mut self) {
@@ -810,7 +829,6 @@ impl<'a, 'd> Builder<'a, 'd> {
             0
         };
         let inner = avail.saturating_sub(2 * v.width() + 2 + num_w).max(1);
-        let ellipsis_w = g.ellipsis.width();
         let numbers = s.code_block.over(s.line_number);
         norm.clear();
         for (i, raw) in body.lines().enumerate() {
@@ -820,6 +838,15 @@ impl<'a, 'd> Builder<'a, 'd> {
             normalize(raw, layout.tab_width, norm);
         }
         let highlighted = syntax.block(out.doc.code_blocks.len(), lang, norm);
+        let natural = norm
+            .lines()
+            .map(|l| l.width())
+            .max()
+            .unwrap_or(0)
+            .min(MAX_WIDE);
+        let wide = natural > inner;
+        let span = inner.max(natural);
+        let body_first = out.line();
         for (i, line) in norm.lines().enumerate() {
             out.begin_line();
             out.doc.push(v, s.code_border);
@@ -829,20 +856,20 @@ impl<'a, 'd> Builder<'a, 'd> {
                 let _ = write!(num, "{:>w$}  ", i + 1, w = num_w - 2);
                 out.doc.push(num, numbers);
             }
-            let (mut cut, mut used) = wrap::fit(line, inner);
-            let truncated = cut < line.len();
-            if truncated {
-                (cut, used) = wrap::fit(line, inner.saturating_sub(ellipsis_w));
-            }
+            let start = out.doc.col();
+            let (cut, used) = wrap::fit(line, span);
             let spans = highlighted.map_or(&[][..], |b| b.line(i));
             emit_code(out.doc, &line[..cut], spans, s);
-            if truncated {
-                out.doc.push(&g.ellipsis, numbers);
-                used += ellipsis_w;
+            out.doc.pad(span - used, s.code_block);
+            if wide {
+                out.doc.mark_window(start, out.doc.col());
             }
-            out.doc.pad(inner.saturating_sub(used) + 1, s.code_block);
+            out.doc.push(" ", s.code_block);
             out.doc.push(v, s.code_border);
             out.end_line();
+        }
+        if wide && out.line() > body_first {
+            out.doc.push_wide(body_first, inner, natural);
         }
 
         out.begin_line();
@@ -1049,6 +1076,14 @@ mod tests {
             .find(|r| r.at as usize <= at)
             .unwrap()
             .style
+    }
+
+    /// Columns a line takes on screen: a wide line shows only `view` of its scrolling part.
+    fn visible_width(doc: &Document, i: usize) -> usize {
+        let hidden = doc
+            .wide_at(i)
+            .map_or(0, |k| (doc.wides[k].width - doc.wides[k].view) as usize);
+        doc.line(i).0.width() - hidden
     }
 
     fn check_invariants(doc: &Document) {
@@ -1271,9 +1306,31 @@ mod tests {
     }
 
     #[test]
-    fn long_code_lines_truncate() {
-        let doc = layout("```\nabcdefghijklmnopqrstuvwxyz\n```", 20);
-        assert_eq!(doc.line(1).0, "│ 1  abcdefghijkl… │");
+    fn long_code_lines_become_a_wide_block() {
+        let doc = layout("```\nabcdefghijklmnopqrstuvwxyz\nshort\n```", 20);
+        assert_eq!(doc.line(1).0, "│ 1  abcdefghijklmnopqrstuvwxyz │");
+        assert_eq!(doc.line(2).0, "│ 2  short                      │");
+        let k = doc.wide_at(1).unwrap();
+        assert_eq!(doc.wide_at(2), Some(k));
+        assert_eq!((doc.wide_at(0), doc.wide_at(3)), (None, None));
+        assert_eq!((doc.wides[k].view, doc.wides[k].width), (13, 26));
+        let (a, b) = doc.window(k, 1);
+        assert_eq!(&doc.line(1).0[a..b], "abcdefghijklmnopqrstuvwxyz");
+        assert_eq!(visible_width(&doc, 1), 20);
+    }
+
+    #[test]
+    fn fitting_code_is_not_wide() {
+        let doc = layout("```\nshort\n```", 20);
+        assert!(doc.wides.is_empty());
+    }
+
+    #[test]
+    fn wide_display_math_scrolls() {
+        let doc = layout("$$a + b + c + d + e + f + g + h + i + j$$", 12);
+        let k = doc.wide_at(0).unwrap();
+        assert_eq!(doc.wides[k].view, 12);
+        assert_eq!(doc.window(k, 0), (0, doc.line(0).0.len()));
     }
 
     #[test]
@@ -1322,7 +1379,7 @@ mod tests {
             for width in [20, 60, 90] {
                 let doc = layout(src, width);
                 check_invariants(&doc);
-                assert!((0..doc.len()).all(|i| doc.line(i).0.width() <= width.max(30)));
+                assert!((0..doc.len()).all(|i| visible_width(&doc, i) <= width.max(30)));
             }
         }
     }

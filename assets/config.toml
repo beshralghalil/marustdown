@@ -81,6 +81,7 @@ search = { fg = "yellow", bold = true, reverse = true }
 outline_level = { fg = "muted" }
 hint = { fg = "orange", bold = true, reverse = true }   # link tags shown by the `hints` key
 link_selected = { fg = "accent", bold = true, reverse = true }
+overflow = { fg = "muted" }  # ‹ › where a wide block continues off screen
 
 # Glyphs use single-column characters unless noted. An empty string hides the element.
 # The defaults use Nerd Font icons for alerts; set `icons = false` for plain ASCII.
@@ -94,7 +95,9 @@ quote = "▌"
 link = "↗"
 image = "🖼"
 rule = "─"
-ellipsis = "…"
+ellipsis = "…"                  # marks cut-off wide blocks in --cat output
+overflow_left = "‹"             # a wide block continues to the left / right
+overflow_right = "›"
 code_copy = "[y] copy"
 code_box = ["╭", "─", "╮", "│", "╰", "╯"]    # top-left, horizontal, top-right, vertical, bottom-left, bottom-right
 table_box = ["┌", "┬", "┐", "├", "┼", "┤", "└", "┴", "┘", "│", "─"]  # top, middle and bottom rows (left, cross, right), vertical, horizontal
@@ -134,4 +137,8 @@ back = ["backspace"]     # return to the previous file after following a link
 copy = ["y"]
 outline = ["o"]
 edit = ["e"]
+scroll_left = ["h", "left"]   # scroll the wide block under the cursor
+scroll_right = ["l", "right"]
+scroll_home = ["H"]
+scroll_end = ["L"]
 quit = ["q", "esc"]
