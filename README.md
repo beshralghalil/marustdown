@@ -107,6 +107,7 @@ mar --color always doc.md | less -R   # keep the styling when piping
 | `x` | Toggle the task under the cursor (saved to the file) |
 | `o` | Outline: type to filter, `↑` `↓` to pick, `Enter` to jump, `Esc` to close |
 | `e` | Open `$VISUAL` / `$EDITOR` at the cursor line, then reload |
+| `h` `l` / `←` `→` | Scroll a code block, diagram or formula wider than the screen; `H` / `L` jump to its ends |
 | `y` | Copy the code block at the cursor |
 | `q` / `Esc` | Quit (`Ctrl-C` always quits) |
 

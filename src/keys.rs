@@ -26,6 +26,10 @@ pub enum Action {
     Copy,
     Outline,
     Edit,
+    ScrollLeft,
+    ScrollRight,
+    ScrollHome,
+    ScrollEnd,
     Quit,
 }
 
@@ -67,6 +71,10 @@ const ACTIONS: KeyTable<Action> = KeyTable {
     copy: Action::Copy,
     outline: Action::Outline,
     edit: Action::Edit,
+    scroll_left: Action::ScrollLeft,
+    scroll_right: Action::ScrollRight,
+    scroll_home: Action::ScrollHome,
+    scroll_end: Action::ScrollEnd,
     quit: Action::Quit,
 };
 

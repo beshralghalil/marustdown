@@ -170,6 +170,7 @@ fields!(Styles {
     outline_level,
     hint,
     link_selected,
+    overflow,
 });
 
 fields!(KeyTable {
@@ -195,6 +196,10 @@ fields!(KeyTable {
     copy,
     outline,
     edit,
+    scroll_left,
+    scroll_right,
+    scroll_home,
+    scroll_end,
     quit,
 });
 
@@ -213,6 +218,8 @@ pub struct Glyphs {
     pub image: String,
     pub rule: String,
     pub ellipsis: String,
+    pub overflow_left: String,
+    pub overflow_right: String,
     pub code_copy: String,
     pub code_box: [String; 6],
     pub table_box: [String; 11],

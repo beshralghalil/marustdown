@@ -104,6 +104,7 @@ code = { fg = "orange", bg = "surface" }
 | `outline_level` | Line numbers in the outline |
 | `hint` | Link tags shown by `f` |
 | `link_selected` | Link selected with Tab |
+| `overflow` | ‹ › markers where a wide block continues off screen |
 
 ## `[glyphs]`
 
@@ -120,7 +121,8 @@ ASCII set; glyphs you set yourself still apply on top of it.
 | `link` | `"↗"` | After link text |
 | `image` | `"🖼"` | Before image alt text |
 | `rule` | `"─"` | Horizontal rule |
-| `ellipsis` | `"…"` | End of a cut-off code line |
+| `ellipsis` | `"…"` | Where a wide block is cut off in `--cat` output |
+| `overflow_left`, `overflow_right` | `"‹"`, `"›"` | A wide block continues to the left / right in the pager |
 | `code_copy` | `"[y] copy"` | Copy hint on code blocks |
 | `code_box` | `["╭", "─", "╮", "│", "╰", "╯"]` | Top-left, horizontal, top-right, vertical, bottom-left, bottom-right |
 | `table_box` | `["┌", "┬", "┐", "├", "┼", "┤", "└", "┴", "┘", "│", "─"]` | Top, middle and bottom rows (left, cross, right), then vertical, horizontal |
@@ -155,6 +157,8 @@ Each action takes a list of keys:
 | `copy` | `y` | Copy the code block |
 | `outline` | `o` | Outline |
 | `edit` | `e` | Open `$VISUAL` / `$EDITOR` at the cursor line |
+| `scroll_left`, `scroll_right` | `h` `left`, `l` `right` | Scroll the wide block under the cursor by 8 columns |
+| `scroll_home`, `scroll_end` | `H`, `L` | Scroll it to the start / end |
 | `quit` | `q` `esc` | Quit |
 
 Ctrl-C always quits.

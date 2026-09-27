@@ -14,11 +14,13 @@ use unicode_width::UnicodeWidthStr;
 use crate::doc::Document;
 use crate::keys::{Action, Key, Keymap};
 use crate::links::{self, Target};
-use crate::render::{self, Decor};
+use crate::render::{self, Decor, Window};
 use crate::search::Matcher;
 use crate::source::Source;
 use crate::theme::{Style, Theme};
 use crate::wrap;
+
+const HSCROLL_STEP: usize = 8;
 
 const ENTER: &str = "\x1b[?1049h\x1b[?25l\x1b[?7l"; // alt screen, hide cursor, no autowrap
 const LEAVE: &str = "\x1b[?7h\x1b[?25h\x1b[?1049l";
@@ -145,6 +147,7 @@ struct Pager<'a> {
     cursor: usize,
     matcher: Option<Matcher>,
     selected: Option<Selection>,
+    hscroll: Vec<usize>, // horizontal offset of each wide block
     history: Vec<Page>,
     mode: Mode,
     message: Option<String>,
@@ -181,6 +184,7 @@ impl<'a> Pager<'a> {
             cursor: 0,
             matcher: None,
             selected: None,
+            hscroll: Vec::new(),
             history: Vec::new(),
             mode: Mode::Normal,
             message: None,
@@ -197,6 +201,8 @@ impl<'a> Pager<'a> {
         (self.width, self.margin) = self.theme.layout.fit(self.size.0 as usize);
         self.doc.layout(self.source.text(), self.width, self.theme);
         self.selected = None;
+        self.hscroll.clear();
+        self.hscroll.resize(self.doc.wides.len(), 0);
         self.cursor = self.cursor.min(self.doc.len().saturating_sub(1));
         self.follow();
     }
@@ -355,6 +361,10 @@ impl<'a> Pager<'a> {
             Action::Copy => self.copy(),
             Action::Outline => self.open_outline(),
             Action::Edit => self.edit(),
+            Action::ScrollLeft => self.hscroll_by(|x, _| x.saturating_sub(HSCROLL_STEP)),
+            Action::ScrollRight => self.hscroll_by(|x, max| (x + HSCROLL_STEP).min(max)),
+            Action::ScrollHome => self.hscroll_by(|_, _| 0),
+            Action::ScrollEnd => self.hscroll_by(|_, max| max),
             Action::Quit => return true,
         }
         false
@@ -383,12 +393,43 @@ impl<'a> Pager<'a> {
         match found {
             Some((line, wrapped)) => {
                 self.jump(line);
+                self.reveal_match(line);
                 if wrapped {
                     self.say("search wrapped");
                 }
             }
             None => self.say("pattern not found"),
         }
+    }
+
+    /// Scrolls a wide block so the first search hit on `line` is visible.
+    fn reveal_match(&mut self, line: usize) {
+        let (Some(m), Some(k)) = (&self.matcher, self.doc.wide_at(line)) else {
+            return;
+        };
+        let text = self.doc.line(line).0;
+        let (start, end) = self.doc.window(k, line);
+        let Some((at, _)) = m.find(text, start).filter(|&(at, _)| at < end) else {
+            return;
+        };
+        let col = text[start..at].width();
+        let (view, width) = (
+            self.doc.wides[k].view as usize,
+            self.doc.wides[k].width as usize,
+        );
+        let offset = &mut self.hscroll[k];
+        if col < *offset || col >= *offset + view {
+            *offset = col.saturating_sub(view / 3).min(width.saturating_sub(view));
+        }
+    }
+
+    /// Moves the horizontal offset of the wide block under the cursor.
+    fn hscroll_by(&mut self, step: impl Fn(usize, usize) -> usize) {
+        let Some(k) = self.doc.wide_at(self.cursor) else {
+            return self.say("nothing to scroll here");
+        };
+        let w = self.doc.wides[k];
+        self.hscroll[k] = step(self.hscroll[k], (w.width - w.view) as usize);
     }
 
     fn search_next(&mut self, forward: bool) {
@@ -768,11 +809,17 @@ impl<'a> Pager<'a> {
                         .filter(|s| s.line == i)
                         .map(|s| (s.start, s.end)),
                     labels: &labels,
+                    window: self
+                        .doc
+                        .wide_at(i)
+                        .map(|k| Window::new(&self.doc, k, i, self.hscroll[k])),
+                    plain: false,
                 };
                 render::pad(buf, self.margin);
                 render::line(&self.doc, i, t, &decor, buf);
                 if i == self.cursor {
-                    let used = self.doc.line(i).0.width();
+                    let hidden = decor.window.map_or(0, |w| w.width - w.view);
+                    let used = self.doc.line(i).0.width() - hidden;
                     render::blank(t, cursor_style, self.width.saturating_sub(used), buf);
                 }
             }
