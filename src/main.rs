@@ -8,6 +8,7 @@ mod links;
 mod math;
 mod pager;
 mod render;
+mod safe;
 mod search;
 mod source;
 mod table;
@@ -27,6 +28,7 @@ use source::Source;
 use theme::Theme;
 
 fn main() -> ExitCode {
+    safe::install_hook();
     match run(Args::parse()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

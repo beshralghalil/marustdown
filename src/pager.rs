@@ -15,6 +15,7 @@ use crate::doc::Document;
 use crate::keys::{Action, Key, Keymap};
 use crate::links::{self, Target};
 use crate::render::{self, Decor, Window};
+use crate::safe;
 use crate::search::Matcher;
 use crate::source::Source;
 use crate::theme::{Style, Theme};
@@ -39,7 +40,9 @@ const HINTS: [(Action, &str); 8] = [
 pub fn run(source: Source, path: Option<PathBuf>, theme: &Theme, keys: Keymap) -> io::Result<()> {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
-        leave();
+        if !safe::catching() {
+            leave();
+        }
         hook(info)
     }));
     terminal::enable_raw_mode()?;

@@ -3,14 +3,21 @@ use latex_to_unicode::parser::Parser;
 use latex_to_unicode::renderer::{RenderMode, Renderer};
 use unicode_width::UnicodeWidthStr;
 
-/// Inline math as one line of Unicode text.
+use crate::safe;
+
+/// Inline math as one line of Unicode text, or the source if rendering fails.
 pub fn inline(tex: &str) -> String {
-    Renderer::new(RenderMode::Inline).render(&Parser::new(tex).parse())
+    safe::catch(|| Renderer::new(RenderMode::Inline).render(&Parser::new(tex).parse()))
+        .unwrap_or_else(|| tex.to_owned())
 }
 
-/// Display math as lines of Unicode text. Matrices and cases are drawn in 2D, beside
-/// the rest of the formula and centered on its baseline.
+/// Display math as lines of Unicode text, or the source if rendering fails. Matrices
+/// and cases are drawn in 2D, beside the rest of the formula and centered on its baseline.
 pub fn display(tex: &str) -> Vec<String> {
+    safe::catch(|| layout(tex)).unwrap_or_else(|| tex.lines().map(str::to_owned).collect())
+}
+
+fn layout(tex: &str) -> Vec<String> {
     let nodes = Parser::new(tex).parse();
     let (inline, block) = (
         Renderer::new(RenderMode::Inline),
