@@ -24,6 +24,7 @@ Show
 # Highlighted code
 Sleep 2s
 Screenshot docs/screenshots/code.png
+Sleep 1s
 
 # Search for a task and check it off
 Type "/Check off" Sleep 400ms Enter
@@ -31,15 +32,27 @@ Sleep 1s
 Type "x"
 Sleep 1.5s
 Screenshot docs/screenshots/tasks.png
+Sleep 1s
 
 # Outline: filter the headings, then jump
 Type "o"
 Sleep 1.2s
 Screenshot docs/screenshots/outline.png
+Sleep 1s
 Type "key"
 Sleep 1s
 Enter
 Sleep 2s
+
+# Math and diagrams
+Type "o"
+Sleep 500ms
+Type "math"
+Sleep 800ms
+Enter
+Sleep 1.5s
+Screenshot docs/screenshots/math-diagrams.png
+Sleep 1s
 
 Type "q"
 Sleep 300ms

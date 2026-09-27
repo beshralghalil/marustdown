@@ -34,20 +34,6 @@ $$
 A = \begin{pmatrix} a & b \\ c & d \end{pmatrix}
 $$
 
-## Tasks
-
-- [x] Render markdown in the terminal
-- [ ] Check off tasks with `x`
-- [ ] Jump anywhere with the outline
-
-## Keys
-
-| Key | Action |
-|:---:|--------|
-| `x` | Toggle the task under the cursor |
-| `o` | Open the outline |
-| `f` | Follow a link from the keyboard |
-
 ## Diagrams
 
 ```mermaid
@@ -62,6 +48,20 @@ sequenceDiagram
     You->>mar: open README.md
     mar-->>You: rendered page
 ```
+
+## Tasks
+
+- [x] Render markdown in the terminal
+- [ ] Check off tasks with `x`
+- [ ] Jump anywhere with the outline
+
+## Keys
+
+| Key | Action |
+|:---:|--------|
+| `x` | Toggle the task under the cursor |
+| `o` | Open the outline |
+| `f` | Follow a link from the keyboard |
 
 ## Configuration
 
