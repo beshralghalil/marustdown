@@ -30,6 +30,9 @@ cargo test
 plus a build with the minimum Rust version (1.92), a static musl release build, and
 `cargo deny check` (see `deny.toml`).
 
+`cargo test` also renders every fixture in [`tests/stress/`](tests/stress/README.md) through
+the `mar` binary; `python3 tests/stress/generate.py` regenerates them.
+
 ## Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/). They decide the
