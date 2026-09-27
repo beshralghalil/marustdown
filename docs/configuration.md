@@ -54,6 +54,7 @@ A theme file holds a `[colors]` table and may override any other table.
 | `icons` | `true` | `false` switches to ASCII glyphs |
 | `status_bar` | `true` | Show the status bar |
 | `math` | `true` | Render `$…$` and `$$…$$` LaTeX as Unicode; `false` shows the source |
+| `diagrams` | `true` | Draw ```` ```mermaid ```` blocks as diagrams; `false` shows the source |
 
 ## `[colors]`
 
@@ -88,6 +89,7 @@ code = { fg = "orange", bg = "surface" }
 | `strong`, `emphasis`, `strike` | `**bold**`, `*italic*`, `~~strike~~` |
 | `code` | Inline code |
 | `math` | Inline and display math |
+| `diagram`, `diagram_border` | Mermaid diagram labels, and their boxes, lines and arrows |
 | `link`, `link_icon` | Link text and the `↗` after it |
 | `image` | Image alt text |
 | `quote`, `quote_bar` | Blockquote text and bar |

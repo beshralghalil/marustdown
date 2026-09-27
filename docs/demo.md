@@ -48,6 +48,21 @@ $$
 | `o` | Open the outline |
 | `f` | Follow a link from the keyboard |
 
+## Diagrams
+
+```mermaid
+graph LR
+    A[Write markdown] --> B{Looks right?}
+    B -->|Yes| C[Ship it]
+    B -->|No| A
+```
+
+```mermaid
+sequenceDiagram
+    You->>mar: open README.md
+    mar-->>You: rendered page
+```
+
 ## Configuration
 
 ### Themes
