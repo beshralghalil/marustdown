@@ -5,6 +5,7 @@ mod highlight;
 mod keys;
 mod layout;
 mod links;
+mod math;
 mod pager;
 mod render;
 mod search;

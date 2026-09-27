@@ -12,7 +12,7 @@ use crate::config::Styles;
 use crate::doc::{Document, Task};
 use crate::highlight::{self, Span, Token};
 use crate::theme::{Style, Theme};
-use crate::{links, table, wrap};
+use crate::{links, math, table, wrap};
 
 const OPTIONS: Options = Options::ENABLE_TABLES
     .union(Options::ENABLE_STRIKETHROUGH)
@@ -200,9 +200,9 @@ struct Events<'a> {
 }
 
 impl<'a> Events<'a> {
-    fn new(src: &'a str) -> Self {
+    fn new(src: &'a str, options: Options) -> Self {
         Events {
-            parser: Parser::new_ext(src, OPTIONS).into_offset_iter(),
+            parser: Parser::new_ext(src, options).into_offset_iter(),
             ahead: VecDeque::new(),
         }
     }
@@ -267,7 +267,7 @@ struct Builder<'a, 'd> {
     slug_counts: HashMap<String, u32>,
     breaks: Vec<u32>,
     syntax: &'d mut highlight::Cache,
-    norm: String, // the open code block with tabs expanded
+    norm: String, // code or math lines with tabs expanded and controls replaced
     num: String,
     natural: Vec<usize>,
     widths: Vec<usize>,
@@ -319,7 +319,9 @@ impl<'a, 'd> Builder<'a, 'd> {
     }
 
     fn run(mut self, src: &str) {
-        let mut events = Events::new(src);
+        let mut options = OPTIONS;
+        options.set(Options::ENABLE_MATH, self.theme.layout.math);
+        let mut events = Events::new(src, options);
         while let Some((event, range)) = events.next() {
             self.at = range.start;
             if self.heading.is_some()
@@ -331,6 +333,9 @@ impl<'a, 'd> Builder<'a, 'd> {
                 Event::Start(tag) => self.start(tag, &mut events),
                 Event::End(tag) => self.end(tag),
                 Event::Text(t) if self.in_code => self.code.push_str(&t),
+                Event::Text(t) if self.inline.text.is_empty() => {
+                    self.inline.push_clean(t.trim_start(), self.cur())
+                }
                 Event::Text(t) => self.inline.push_clean(&t, self.cur()),
                 Event::Code(t) => {
                     let style = self.cur().over(self.theme.styles.code);
@@ -338,6 +343,12 @@ impl<'a, 'd> Builder<'a, 'd> {
                     self.inline.push_clean(&t, style);
                     self.inline.push(" ", style);
                 }
+                Event::InlineMath(tex) => {
+                    let style = self.cur().over(self.theme.styles.math);
+                    self.inline.push_clean(&math::inline(&tex), style);
+                }
+                Event::DisplayMath(tex) => self.display_math(&tex),
+                Event::SoftBreak | Event::HardBreak if self.inline.text.is_empty() => {}
                 Event::SoftBreak => self.inline.push(" ", self.cur()),
                 Event::HardBreak => self.inline.push("\n", self.cur()),
                 Event::InlineHtml(h)
@@ -534,8 +545,19 @@ impl<'a, 'd> Builder<'a, 'd> {
     }
 
     fn paragraph(&mut self) {
-        self.flush(self.base(), "", Style::default());
+        self.flush_text();
         self.finish_task();
+    }
+
+    /// Flushes inline text as paragraph lines, after the blank line a preceding block asked for.
+    fn flush_text(&mut self) {
+        if self.inline.text.trim().is_empty() {
+            return self.inline.clear();
+        }
+        if std::mem::take(&mut self.gap) {
+            self.out.gap();
+        }
+        self.flush(self.base(), "", Style::default());
     }
 
     /// Wraps the inline scratch into lines, with `lead` on the first line and a
@@ -684,6 +706,41 @@ impl<'a, 'd> Builder<'a, 'd> {
             let task = &mut self.out.doc.tasks[k];
             task.end = end.max(task.line + 1);
         }
+    }
+
+    /// A centered block between the lines of its paragraph; inline in headings and tables,
+    /// which can't be split.
+    fn display_math(&mut self, tex: &str) {
+        let style = self.cur().over(self.theme.styles.math);
+        if self.heading.is_some() || self.table.is_some() {
+            return self.inline.push_clean(&math::inline(tex), style);
+        }
+        if !self.inline.text.trim().is_empty() {
+            self.flush_text();
+            self.gap = true;
+        }
+        self.inline.clear();
+        if std::mem::take(&mut self.gap) {
+            self.out.gap();
+        }
+        let avail = self.out.avail();
+        let lines = math::display(tex);
+        let width = lines
+            .iter()
+            .map(|l| l.width())
+            .max()
+            .unwrap_or(0)
+            .min(avail);
+        for line in &lines {
+            self.norm.clear();
+            normalize(line, self.theme.layout.tab_width, &mut self.norm);
+            let cut = wrap::fit(&self.norm, avail).0;
+            self.out.begin_line();
+            self.out.doc.pad((avail - width) / 2, Style::default());
+            self.out.doc.push(&self.norm[..cut], style);
+            self.out.end_line();
+        }
+        self.gap = true;
     }
 
     fn rule(&mut self) {
@@ -1123,6 +1180,61 @@ mod tests {
         let t = test_theme();
         assert!(plain(&doc).ends_with("WARNING\n▌ Careful."));
         assert_eq!(style_of(&doc, 0, "WARNING").fg, t.styles.alert_warning.fg);
+    }
+
+    #[test]
+    fn inline_math() {
+        let doc = layout("Area $\\pi r^2$ here", 80);
+        assert_eq!(plain(&doc), "Area π r² here");
+        assert_eq!(style_of(&doc, 0, "π r²").fg, test_theme().styles.math.fg);
+    }
+
+    #[test]
+    fn display_math_is_a_centered_block() {
+        let doc = layout("before\n$$x^2$$\nafter", 20);
+        assert_eq!(plain(&doc), "before\n\n         x²\n\nafter");
+        let doc = layout("$$\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}$$", 13);
+        assert_eq!(plain(&doc), "  ⎛ a   b ⎞\n  ⎝ c   d ⎠");
+    }
+
+    #[test]
+    fn multi_line_math_is_centered_as_a_block() {
+        let doc = layout(
+            r"$$f(x) = \begin{cases} 1 & x > 0 \\ 0 & \text{otherwise} \end{cases}$$",
+            40,
+        );
+        let (a, b) = (doc.line(0).0, doc.line(1).0);
+        assert_eq!(
+            a.find('⎧').map(|i| a[..i].width()),
+            b.find('⎩').map(|i| b[..i].width())
+        );
+    }
+
+    #[test]
+    fn text_after_display_math_has_no_leading_space() {
+        let doc = layout("- item $$x^2$$ after", 40);
+        assert!(plain(&doc).ends_with("\n  after"));
+    }
+
+    #[test]
+    fn display_math_stays_inline_in_tables() {
+        let doc = layout("| a |\n|---|\n| $$x^2$$ |", 20);
+        assert!(plain(&doc).contains("│ x² │"));
+    }
+
+    #[test]
+    fn dollar_amounts_are_not_math() {
+        let doc = layout("costs $5 and $10", 80);
+        assert_eq!(plain(&doc), "costs $5 and $10");
+    }
+
+    #[test]
+    fn math_can_be_turned_off() {
+        let mut cfg = crate::config::defaults();
+        cfg.layout.math = false;
+        let mut doc = Document::new();
+        doc.layout("$x^2$ and $$y$$", 80, &Theme::new(cfg).unwrap());
+        assert_eq!(plain(&doc), "$x^2$ and $$y$$");
     }
 
     #[test]

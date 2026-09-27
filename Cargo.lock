@@ -255,6 +255,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
+name = "latex-to-unicode"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd4163985a58a9b834744e3bb6bd6407ac193ac63617b9b1ce9f63ef3bede696"
+
+[[package]]
 name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -295,6 +301,7 @@ dependencies = [
  "clap_complete",
  "clap_mangen",
  "crossterm",
+ "latex-to-unicode",
  "memmap2",
  "pulldown-cmark",
  "serde",
