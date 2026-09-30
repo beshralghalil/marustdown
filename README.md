@@ -11,7 +11,8 @@ typography.
 
 ## Features
 
-- **Pager** with a cursor line, search, heading jumps and a breadcrumb of the current section.
+- **Pager** with a cursor line, search, heading jumps, a breadcrumb of the current section,
+  and smooth scrolling for page and heading jumps.
 - **Task lists you can check off.** Toggling a task writes `[ ]` ↔ `[x]` back to the file.
 - **Keyboard link following.** `f` tags every visible link, and typing a tag opens it
   (in uppercase, it copies the URL instead). Tab and Shift-Tab step through links, and Enter

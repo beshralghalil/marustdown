@@ -16,6 +16,7 @@ center = true        # center content; when false it is indented by `margin`
 line_numbers = true  # number the lines of code blocks
 tab_width = 4        # tab stop width inside code blocks
 scroll_off = 3       # lines kept visible above and below the cursor
+scroll_duration = 120  # milliseconds a page or heading jump glides; 0 jumps instantly
 color = true         # false renders without colors (same as --no-color or NO_COLOR)
 icons = true         # false switches to the ASCII glyph set (same as --no-icons)
 status_bar = true    # show the status bar in the pager

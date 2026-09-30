@@ -4,13 +4,14 @@ use std::fs::OpenOptions;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{env, mem, panic};
 
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::terminal;
 use unicode_width::UnicodeWidthStr;
 
+use crate::anim::{self, Glide};
 use crate::doc::Document;
 use crate::keys::{Action, Key, Keymap};
 use crate::links::{self, Target};
@@ -68,6 +69,10 @@ pub fn run(
             }
             pager.draw(&mut out)?;
             dirty = false;
+        }
+        if pager.glide.is_some() && !event::poll(anim::FRAME)? {
+            dirty = true;
+            continue;
         }
         if pager.watch.is_some() && !event::poll(watch::INTERVAL)? {
             dirty = pager.check_file();
@@ -170,6 +175,7 @@ struct Pager<'a> {
     hscroll: Vec<usize>, // horizontal offset of each wide block
     watching: bool,
     watch: Option<Watch>, // the shown file, while watching
+    glide: Option<Glide>, // drawn top line while a jump animates; `top` is already the target
     history: Vec<Page>,
     mode: Mode,
     message: Option<String>,
@@ -210,6 +216,7 @@ impl<'a> Pager<'a> {
             hscroll: Vec::new(),
             watching,
             watch: None,
+            glide: None,
             history: Vec::new(),
             mode: Mode::Normal,
             message: None,
@@ -285,8 +292,20 @@ impl<'a> Pager<'a> {
             .checked_sub(1)
     }
 
-    /// Handles one key press; returns true to quit.
+    /// Handles one key press; returns true to quit. A jump of more than one line
+    /// glides there, and a new key first finishes any glide still running.
     fn key(&mut self, key: KeyEvent) -> bool {
+        self.glide = None;
+        let before = self.top;
+        let quit = self.handle(key);
+        let duration = Duration::from_millis(self.theme.layout.scroll_duration);
+        if !duration.is_zero() && self.top.abs_diff(before) > 1 {
+            self.glide = Some(Glide::new(before, self.top, duration));
+        }
+        quit
+    }
+
+    fn handle(&mut self, key: KeyEvent) -> bool {
         let ctrl_c =
             key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL);
         match &mut self.mode {
@@ -855,9 +874,13 @@ impl<'a> Pager<'a> {
             let rows = (self.size.1 as usize).saturating_sub(1).max(1);
             o.scroll = o.scroll.min(o.sel).max((o.sel + 1).saturating_sub(rows));
         }
+        let top = self.glide.as_ref().and_then(|g| g.at(Instant::now()));
+        if top.is_none() {
+            self.glide = None;
+        }
         match &self.mode {
             Mode::Outline(o) => self.draw_outline(o, &mut buf),
-            _ => self.draw_lines(&mut buf),
+            _ => self.draw_lines(top.unwrap_or(self.top), &mut buf),
         }
         if self.theme.layout.status_bar || !matches!(self.mode, Mode::Normal) {
             self.draw_status(&mut buf);
@@ -870,7 +893,7 @@ impl<'a> Pager<'a> {
         result
     }
 
-    fn draw_lines(&self, buf: &mut String) {
+    fn draw_lines(&self, top: usize, buf: &mut String) {
         let (t, cursor_style) = (self.theme, self.theme.styles.cursor);
         let mut labels = Vec::new();
         let hints = match &self.mode {
@@ -879,7 +902,7 @@ impl<'a> Pager<'a> {
         };
         for row in 0..self.rows() {
             let _ = write!(buf, "\x1b[{};1H", row + 1);
-            let i = self.top + row;
+            let i = top + row;
             if i < self.doc.len() {
                 labels.clear();
                 if let Some((h, tag)) = &hints {
