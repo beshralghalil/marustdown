@@ -1,6 +1,6 @@
 [package]
 name = "marustdown"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 rust-version = "1.92"
 description = "A fast, configurable terminal markdown viewer with syntax highlighting, task toggling and keyboard link following"
