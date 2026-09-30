@@ -4,7 +4,7 @@
 .SH NAME
 mar \- A fast, configurable terminal markdown viewer
 .SH SYNOPSIS
-\fBmar\fR [\fB\-\-cat\fR] [\fB\-\-color\fR] [\fB\-\-width\fR] [\fB\-\-theme\fR] [\fB\-\-no\-color\fR] [\fB\-\-no\-icons\fR] [\fB\-\-config\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILE\fR] 
+\fBmar\fR [\fB\-\-cat\fR] [\fB\-\-color\fR] [\fB\-\-width\fR] [\fB\-\-theme\fR] [\fB\-\-no\-color\fR] [\fB\-\-watch\fR] [\fB\-\-no\-watch\fR] [\fB\-\-no\-icons\fR] [\fB\-\-config\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILE\fR] 
 .SH DESCRIPTION
 Render GitHub\-flavored markdown in a full\-screen pager, with syntax\-highlighted code, task lists you can check off, keyboard link following and an outline. When stdout isn\*(Aqt a terminal, the rendered document is printed instead.
 .SH OPTIONS
@@ -35,6 +35,12 @@ Color preset: dark, light, ansi, or a theme file name
 .TP
 \fB\-\-no\-color\fR
 Same as `\-\-color never` (NO_COLOR is honored too)
+.TP
+\fB\-\-watch\fR
+Reload the file when it changes on disk (also `watch = true` in the config)
+.TP
+\fB\-\-no\-watch\fR
+Don\*(Aqt watch the file, even if the config enables it
 .TP
 \fB\-\-no\-icons\fR
 Use ASCII glyphs instead of icons

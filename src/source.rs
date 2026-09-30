@@ -6,7 +6,7 @@ use memmap2::Mmap;
 
 pub enum Source {
     Mapped(Mmap),
-    Buffered(String), // stdin, or files too small for mmap to pay off
+    Buffered(String), // stdin, watched files, or files too small for mmap to pay off
 }
 
 const MAPPED_MIN: u64 = 64 * 1024; // under this, read() beats mmap + page faults
@@ -24,6 +24,12 @@ impl Source {
         let map = unsafe { Mmap::map(&file)? };
         std::str::from_utf8(&map).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         Ok(Source::Mapped(map))
+    }
+
+    /// Reads the whole file into memory; for files that change while shown, where a
+    /// mapping could be truncated underneath.
+    pub fn read(path: &Path) -> io::Result<Self> {
+        Ok(Source::Buffered(std::fs::read_to_string(path)?))
     }
 
     pub fn stdin() -> io::Result<Self> {

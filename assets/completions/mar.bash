@@ -23,7 +23,7 @@ _mar() {
 
     case "${cmd}" in
         mar)
-            opts="-h -V --cat --color --width --theme --no-color --no-icons --config --help --version"
+            opts="-h -V --cat --color --width --theme --no-color --watch --no-watch --no-icons --config --help --version"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

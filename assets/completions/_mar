@@ -21,6 +21,8 @@ _mar() {
 '--config=[Config file to use instead of \$XDG_CONFIG_HOME/marustdown/config.toml]:PATH:_files' \
 '--cat[Print the rendered document and exit instead of paging (automatic when stdout isn'\''t a terminal)]' \
 '--no-color[Same as \`--color never\` (NO_COLOR is honored too)]' \
+'--watch[Reload the file when it changes on disk (also \`watch = true\` in the config)]' \
+'--no-watch[Don'\''t watch the file, even if the config enables it]' \
 '--no-icons[Use ASCII glyphs instead of icons]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \

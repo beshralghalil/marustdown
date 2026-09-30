@@ -163,6 +163,15 @@ impl Document {
         k.checked_sub(1).map_or(0, |k| self.anchors[k].1)
     }
 
+    /// Source byte range of the block `line` belongs to; `None` end means to the end.
+    pub fn source_range(&self, line: usize) -> (usize, Option<usize>) {
+        let k = self.anchors.partition_point(|a| a.0 as usize <= line);
+        match k.checked_sub(1) {
+            Some(k) => (self.anchors[k].1, self.anchors.get(k + 1).map(|a| a.1)),
+            None => (0, self.anchors.first().map(|a| a.1)),
+        }
+    }
+
     pub fn line_at_offset(&self, offset: usize) -> usize {
         let k = self.anchors.partition_point(|a| a.1 <= offset);
         k.checked_sub(1).map_or(0, |k| self.anchors[k].0 as usize)

@@ -40,6 +40,7 @@ pub struct Layout {
     pub status_bar: bool,
     pub math: bool,
     pub diagrams: bool,
+    pub watch: bool,
 }
 
 impl Layout {
