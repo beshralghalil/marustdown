@@ -19,6 +19,7 @@ use crate::safe;
 use crate::search::Matcher;
 use crate::source::Source;
 use crate::theme::{Style, Theme};
+use crate::watch::{self, Change, Watch};
 use crate::wrap;
 
 const HSCROLL_STEP: usize = 8;
@@ -37,7 +38,13 @@ const HINTS: [(Action, &str); 8] = [
     (Action::Quit, "quit"),
 ];
 
-pub fn run(source: Source, path: Option<PathBuf>, theme: &Theme, keys: Keymap) -> io::Result<()> {
+pub fn run(
+    source: Source,
+    path: Option<PathBuf>,
+    theme: &Theme,
+    keys: Keymap,
+    watching: bool,
+) -> io::Result<()> {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         if !safe::catching() {
@@ -49,24 +56,34 @@ pub fn run(source: Source, path: Option<PathBuf>, theme: &Theme, keys: Keymap) -
     let _guard = Guard;
     write_tty(ENTER)?;
 
-    let mut pager = Pager::new(source, path, theme, keys, terminal::size()?);
+    let mut pager = Pager::new(source, path, theme, keys, terminal::size()?, watching);
     let mut out = io::stdout().lock();
     let mut size = pager.size;
+    let mut dirty = true;
     loop {
         // Drawing only when idle coalesces key repeats and resize storms.
-        if !event::poll(Duration::ZERO)? {
+        if dirty && !event::poll(Duration::ZERO)? {
             if size != pager.size {
                 pager.resize(size);
             }
             pager.draw(&mut out)?;
+            dirty = false;
+        }
+        if pager.watch.is_some() && !event::poll(watch::INTERVAL)? {
+            dirty = pager.check_file();
+            continue;
         }
         match event::read()? {
             Event::Key(key) if key.kind != KeyEventKind::Release => {
                 if pager.key(key) {
                     return Ok(());
                 }
+                dirty = true;
             }
-            Event::Resize(cols, rows) => size = (cols, rows),
+            Event::Resize(cols, rows) => {
+                size = (cols, rows);
+                dirty = true;
+            }
             _ => {}
         }
     }
@@ -151,6 +168,8 @@ struct Pager<'a> {
     matcher: Option<Matcher>,
     selected: Option<Selection>,
     hscroll: Vec<usize>, // horizontal offset of each wide block
+    watching: bool,
+    watch: Option<Watch>, // the shown file, while watching
     history: Vec<Page>,
     mode: Mode,
     message: Option<String>,
@@ -167,6 +186,7 @@ impl<'a> Pager<'a> {
         theme: &'a Theme,
         keys: Keymap,
         size: (u16, u16),
+        watching: bool,
     ) -> Self {
         let mut hints = String::new();
         for (action, label) in HINTS {
@@ -188,6 +208,8 @@ impl<'a> Pager<'a> {
             matcher: None,
             selected: None,
             hscroll: Vec::new(),
+            watching,
+            watch: None,
             history: Vec::new(),
             mode: Mode::Normal,
             message: None,
@@ -196,6 +218,7 @@ impl<'a> Pager<'a> {
             buf: String::new(),
             bar: String::new(),
         };
+        pager.rewatch();
         pager.relayout();
         pager
     }
@@ -488,12 +511,69 @@ impl<'a> Pager<'a> {
 
     fn reload(&mut self) {
         if let Some(path) = &self.path {
-            match Source::open(path) {
+            match self.load(path) {
                 Ok(source) => self.source = source,
                 Err(e) => return self.say(format!("reload failed: {e}")),
             }
         }
+        self.rewatch();
         self.relayout();
+    }
+
+    /// Watched files are read into memory: a mapping could be truncated underneath.
+    fn load(&self, path: &Path) -> io::Result<Source> {
+        if self.watching {
+            Source::read(path)
+        } else {
+            Source::open(path)
+        }
+    }
+
+    fn rewatch(&mut self) {
+        self.watch = self
+            .path
+            .as_deref()
+            .filter(|_| self.watching)
+            .map(Watch::new);
+    }
+
+    /// Reloads the watched file if it changed on disk, keeping the cursor on the same
+    /// text, or at the end if it was there. Returns whether anything needs redrawing.
+    fn check_file(&mut self) -> bool {
+        let (Some(watch), Some(path)) = (&mut self.watch, &self.path) else {
+            return false;
+        };
+        match watch.check() {
+            Change::None => false,
+            Change::Missing => {
+                self.say("file missing");
+                true
+            }
+            Change::Modified => {
+                let source = match self.load(path) {
+                    Ok(source) => source,
+                    Err(e) => {
+                        self.say(format!("reload failed: {e}"));
+                        return true;
+                    }
+                };
+                let at_end = self.cursor + 1 >= self.doc.len();
+                let (start, end) = self.doc.source_range(self.cursor);
+                let into = self.cursor - self.doc.line_at_offset(start);
+                let old = mem::replace(&mut self.source, source);
+                let (old, new) = (old.text(), self.source.text());
+                let offset = watch::relocate(old, new, start, end.unwrap_or(old.len()));
+                self.relayout();
+                self.cursor = if at_end {
+                    self.last()
+                } else {
+                    (self.doc.line_at_offset(offset) + into).min(self.last())
+                };
+                self.follow();
+                self.say("reloaded");
+                true
+            }
+        }
     }
 
     fn edit(&mut self) {
@@ -661,7 +741,7 @@ impl<'a> Pager<'a> {
 
     /// Opens a linked markdown file in place, remembering the current one for `back`.
     fn visit(&mut self, path: PathBuf, anchor: Option<&str>) {
-        let source = match Source::open(&path) {
+        let source = match self.load(&path) {
             Ok(source) => source,
             Err(e) => return self.say(format!("{}: {e}", path.display())),
         };
@@ -675,11 +755,18 @@ impl<'a> Pager<'a> {
             offset,
         });
         (self.cursor, self.top) = (0, 0);
+        self.rewatch();
         self.relayout();
         match anchor {
             Some(anchor) => self.goto_anchor(anchor),
             None => self.say(message),
         }
+    }
+
+    /// Re-reads the shown file, which may have changed while another one was open.
+    fn reload_at(&mut self, offset: usize) {
+        self.reload();
+        self.jump(self.doc.line_at_offset(offset));
     }
 
     fn back(&mut self) {
@@ -688,6 +775,9 @@ impl<'a> Pager<'a> {
         };
         self.source = page.source;
         self.path = page.path;
+        if self.watching {
+            return self.reload_at(page.offset);
+        }
         self.relayout();
         self.jump(self.doc.line_at_offset(page.offset));
     }

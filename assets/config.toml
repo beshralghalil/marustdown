@@ -21,6 +21,7 @@ icons = true         # false switches to the ASCII glyph set (same as --no-icons
 status_bar = true    # show the status bar in the pager
 math = true          # render $…$ and $$…$$ LaTeX as Unicode; false shows the source
 diagrams = true      # draw ```mermaid blocks as diagrams; false shows the source
+watch = false        # reload the file when it changes on disk (same as --watch)
 
 # Named colors are defined by the theme preset. You can override or add any here:
 #   [colors]

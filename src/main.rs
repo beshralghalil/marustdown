@@ -14,6 +14,7 @@ mod search;
 mod source;
 mod table;
 mod theme;
+mod watch;
 mod wrap;
 
 use std::io::{self, IsTerminal};
@@ -71,8 +72,10 @@ fn run(args: Args) -> Result<(), String> {
     let keys = Keymap::new(&theme.keys)?;
 
     let path = args.file.filter(|p| p.as_os_str() != "-");
+    let watch = paged && path.is_some() && (args.watch || theme.layout.watch) && !args.no_watch;
+    let open = if watch { Source::read } else { Source::open };
     let source = match &path {
-        Some(p) => Source::open(p).map_err(|e| format!("{}: {e}", p.display()))?,
+        Some(p) => open(p).map_err(|e| format!("{}: {e}", p.display()))?,
         None if io::stdin().is_terminal() => Args::command()
             .error(
                 ErrorKind::MissingRequiredArgument,
@@ -83,7 +86,7 @@ fn run(args: Args) -> Result<(), String> {
     };
 
     let result = if paged {
-        pager::run(source, path, &theme, keys)
+        pager::run(source, path, &theme, keys, watch)
     } else {
         cat(&source, &theme, plain)
     };

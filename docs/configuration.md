@@ -54,6 +54,7 @@ A theme file holds a `[colors]` table and may override any other table.
 | `icons` | `true` | `false` switches to ASCII glyphs |
 | `status_bar` | `true` | Show the status bar |
 | `math` | `true` | Render `$…$` and `$$…$$` LaTeX as Unicode; `false` shows the source |
+| `watch` | `false` | Reload the file when it changes on disk; `--watch` / `--no-watch` override it |
 | `diagrams` | `true` | Draw ```` ```mermaid ```` blocks as diagrams; `false` shows the source |
 
 ## `[colors]`

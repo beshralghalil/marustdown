@@ -18,6 +18,8 @@ typography.
   opens the selected one. `#anchors` jump within the page, linked `.md` files open in
   the viewer with a back history, and everything else goes to `xdg-open`.
 - **Outline picker.** Filter the headings by typing, then jump to one.
+- **Live reload** with `--watch`: the view follows changes to the file, keeps your place,
+  and stays at the end when you were there, like `tail -f`.
 - **Edit in `$EDITOR`** at the cursor's source line, and see the result when you return.
 - **Copy code blocks** to the system clipboard with OSC 52, which also works over SSH.
 - **Math**: `$…$` and `$$…$$` LaTeX is rendered as Unicode, like `x² + yᵢ`, `∑ᵢ₌₁ⁿ` or
@@ -90,6 +92,7 @@ mar --color always doc.md | less -R   # keep the styling when piping
 | Option | |
 |---|---|
 | `--cat` | Print and exit instead of paging |
+| `--watch` / `--no-watch` | Reload the file when it changes on disk (off by default; `watch = true` in the config) |
 | `--color <WHEN>` | `auto` (default: styled only on a terminal), `always`, or `never` |
 | `--width <N>` | Maximum content width (default 90) |
 | `--theme <NAME>` | `dark`, `light`, `ansi`, or a custom theme file |

@@ -48,6 +48,12 @@ pub struct Args {
     /// Same as `--color never` (NO_COLOR is honored too)
     #[arg(long)]
     pub no_color: bool,
+    /// Reload the file when it changes on disk (also `watch = true` in the config)
+    #[arg(long, overrides_with = "no_watch")]
+    pub watch: bool,
+    /// Don't watch the file, even if the config enables it
+    #[arg(long, overrides_with = "watch")]
+    pub no_watch: bool,
     /// Use ASCII glyphs instead of icons
     #[arg(long)]
     pub no_icons: bool,
