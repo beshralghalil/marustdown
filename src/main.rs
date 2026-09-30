@@ -1,3 +1,4 @@
+mod anim;
 mod cli;
 mod config;
 mod diagram;

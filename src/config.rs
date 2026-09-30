@@ -35,6 +35,7 @@ pub struct Layout {
     pub line_numbers: bool,
     pub tab_width: usize,
     pub scroll_off: usize,
+    pub scroll_duration: u64,
     pub color: bool,
     pub icons: bool,
     pub status_bar: bool,

@@ -86,6 +86,9 @@ fn validate(cfg: &Config) -> Result<(), String> {
     if !(1..=16).contains(&l.tab_width) {
         return Err("layout.tab_width: must be between 1 and 16".into());
     }
+    if l.scroll_duration > 1000 {
+        return Err("layout.scroll_duration: at most 1000 milliseconds".into());
+    }
     if l.width == 0 {
         return Err("layout.width: must be at least 1".into());
     }
