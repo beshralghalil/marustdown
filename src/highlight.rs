@@ -1,10 +1,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::OnceLock;
-
-use syntect::easy::ScopeRangeIterator;
-use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(feature = "highlight"), allow(dead_code))]
 pub enum Token {
     Keyword,
     String,
@@ -23,90 +20,95 @@ pub enum Token {
 /// A styled range of one line: (start, end, token), in bytes.
 pub type Span = (u32, u32, Token);
 
-/// Scope prefixes, most specific first; a scope takes the first rule that matches it.
-const RULES: &[(&str, Token)] = &[
-    ("comment", Token::Comment),
-    ("constant.character.escape", Token::Constant),
-    ("string", Token::String),
-    ("markup.raw", Token::String),
-    ("constant.numeric", Token::Number),
-    ("constant", Token::Constant),
-    ("support.constant", Token::Constant),
-    ("keyword.operator", Token::Operator),
-    ("keyword", Token::Keyword),
-    ("storage", Token::Keyword),
-    ("entity.name.function", Token::Function),
-    ("support.function", Token::Function),
-    ("variable.function", Token::Function),
-    ("variable.annotation", Token::Function),
-    ("entity.name.tag", Token::Tag),
-    ("entity.other.attribute-name", Token::Attribute),
-    ("entity.name", Token::Type),
-    ("entity.other.inherited-class", Token::Type),
-    ("support.type", Token::Type),
-    ("support.class", Token::Type),
-    ("markup.inserted", Token::Inserted),
-    ("markup.deleted", Token::Deleted),
-];
+#[cfg(feature = "highlight")]
+mod engine {
+    use std::sync::OnceLock;
 
-/// Code-fence names that differ from the syntax's file extension or name.
-const ALIASES: &[(&str, &str)] = &[
-    ("shell", "bash"),
-    ("console", "bash"),
-    ("shellsession", "bash"),
-    ("zsh", "bash"),
-    ("golang", "go"),
-    ("c++", "cpp"),
-    ("jsonc", "json"),
-    ("docker", "dockerfile"),
-];
+    use syntect::easy::ScopeRangeIterator;
+    use syntect::parsing::{ParseState, Scope, ScopeStack, SyntaxReference, SyntaxSet};
 
-struct Syntaxes {
-    set: SyntaxSet,
-    rules: Vec<(Scope, Token)>,
-}
+    use super::{Span, Token};
 
-/// Loaded on first use, so documents without code blocks never pay for it.
-fn syntaxes() -> &'static Syntaxes {
-    static SYNTAXES: OnceLock<Syntaxes> = OnceLock::new();
-    SYNTAXES.get_or_init(|| Syntaxes {
-        set: two_face::syntax::extra_newlines(),
-        rules: RULES
-            .iter()
-            .map(|&(s, t)| (Scope::new(s).expect("valid scope"), t))
-            .collect(),
-    })
-}
+    /// Scope prefixes, most specific first; a scope takes the first rule that matches it.
+    const RULES: &[(&str, Token)] = &[
+        ("comment", Token::Comment),
+        ("constant.character.escape", Token::Constant),
+        ("string", Token::String),
+        ("markup.raw", Token::String),
+        ("constant.numeric", Token::Number),
+        ("constant", Token::Constant),
+        ("support.constant", Token::Constant),
+        ("keyword.operator", Token::Operator),
+        ("keyword", Token::Keyword),
+        ("storage", Token::Keyword),
+        ("entity.name.function", Token::Function),
+        ("support.function", Token::Function),
+        ("variable.function", Token::Function),
+        ("variable.annotation", Token::Function),
+        ("entity.name.tag", Token::Tag),
+        ("entity.other.attribute-name", Token::Attribute),
+        ("entity.name", Token::Type),
+        ("entity.other.inherited-class", Token::Type),
+        ("support.type", Token::Type),
+        ("support.class", Token::Type),
+        ("markup.inserted", Token::Inserted),
+        ("markup.deleted", Token::Deleted),
+    ];
 
-fn find<'a>(set: &'a SyntaxSet, lang: &str) -> Option<&'a SyntaxReference> {
-    let lang = ALIASES
-        .iter()
-        .find(|(a, _)| a.eq_ignore_ascii_case(lang))
-        .map_or(lang, |(_, to)| to);
-    set.find_syntax_by_token(lang)
-        .filter(|s| s.name != "Plain Text")
-}
+    /// Code-fence names that differ from the syntax's file extension or name.
+    const ALIASES: &[(&str, &str)] = &[
+        ("shell", "bash"),
+        ("console", "bash"),
+        ("shellsession", "bash"),
+        ("zsh", "bash"),
+        ("golang", "go"),
+        ("c++", "cpp"),
+        ("jsonc", "json"),
+        ("docker", "dockerfile"),
+    ];
 
-impl Syntaxes {
-    fn token(&self, stack: &ScopeStack) -> Option<Token> {
-        stack.as_slice().iter().rev().find_map(|&scope| {
-            self.rules
+    struct Syntaxes {
+        set: SyntaxSet,
+        rules: Vec<(Scope, Token)>,
+    }
+
+    /// Loaded on first use, so documents without code blocks never pay for it.
+    fn syntaxes() -> &'static Syntaxes {
+        static SYNTAXES: OnceLock<Syntaxes> = OnceLock::new();
+        SYNTAXES.get_or_init(|| Syntaxes {
+            set: two_face::syntax::extra_newlines(),
+            rules: RULES
                 .iter()
-                .find(|(rule, _)| rule.is_prefix_of(scope))
-                .map(|&(_, t)| t)
+                .map(|&(s, t)| (Scope::new(s).expect("valid scope"), t))
+                .collect(),
         })
+    }
+
+    fn find<'a>(set: &'a SyntaxSet, lang: &str) -> Option<&'a SyntaxReference> {
+        let lang = ALIASES
+            .iter()
+            .find(|(a, _)| a.eq_ignore_ascii_case(lang))
+            .map_or(lang, |(_, to)| to);
+        set.find_syntax_by_token(lang)
+            .filter(|s| s.name != "Plain Text")
+    }
+
+    impl Syntaxes {
+        fn token(&self, stack: &ScopeStack) -> Option<Token> {
+            stack.as_slice().iter().rev().find_map(|&scope| {
+                self.rules
+                    .iter()
+                    .find(|(rule, _)| rule.is_prefix_of(scope))
+                    .map(|&(_, t)| t)
+            })
+        }
     }
 
     /// Appends the spans of every line of `code`, closing each line in `ends`.
     /// Returns false when `lang` is not a known language.
-    fn highlight(
-        &self,
-        lang: &str,
-        code: &str,
-        spans: &mut Vec<Span>,
-        ends: &mut Vec<u32>,
-    ) -> bool {
-        let Some(syntax) = find(&self.set, lang) else {
+    pub fn highlight(lang: &str, code: &str, spans: &mut Vec<Span>, ends: &mut Vec<u32>) -> bool {
+        let syntaxes = syntaxes();
+        let Some(syntax) = find(&syntaxes.set, lang) else {
             return false;
         };
         let mut state = ParseState::new(syntax);
@@ -117,7 +119,7 @@ impl Syntaxes {
             line.clear();
             line.push_str(text);
             line.push('\n');
-            match state.parse_line(&line, &self.set) {
+            match state.parse_line(&line, &syntaxes.set) {
                 Ok(ops) if parsing => {
                     for (range, op) in ScopeRangeIterator::new(&ops, &line) {
                         if stack.apply(op).is_err() {
@@ -125,7 +127,7 @@ impl Syntaxes {
                             break;
                         }
                         let (start, end) = (range.start, range.end.min(text.len()));
-                        if let Some(token) = self.token(&stack).filter(|_| start < end) {
+                        if let Some(token) = syntaxes.token(&stack).filter(|_| start < end) {
                             push(spans, (start as u32, end as u32, token));
                         }
                     }
@@ -136,13 +138,20 @@ impl Syntaxes {
         }
         true
     }
+
+    /// Appends `span`, merging it into the previous one when they touch with the same token.
+    fn push(spans: &mut Vec<Span>, span: Span) {
+        match spans.last_mut() {
+            Some(last) if last.1 == span.0 && last.2 == span.2 => last.1 = span.1,
+            _ => spans.push(span),
+        }
+    }
 }
 
-/// Appends `span`, merging it into the previous one when they touch with the same token.
-fn push(spans: &mut Vec<Span>, span: Span) {
-    match spans.last_mut() {
-        Some(last) if last.1 == span.0 && last.2 == span.2 => last.1 = span.1,
-        _ => spans.push(span),
+#[cfg(not(feature = "highlight"))]
+mod engine {
+    pub fn highlight(_: &str, _: &str, _: &mut Vec<super::Span>, _: &mut Vec<u32>) -> bool {
+        false
     }
 }
 
@@ -172,7 +181,7 @@ impl Block {
 impl Cache {
     /// Spans for code block number `k`, or None if `lang` isn't a known language.
     pub fn block(&mut self, k: usize, lang: &str, code: &str) -> Option<&Block> {
-        if lang.is_empty() {
+        if !cfg!(feature = "highlight") || lang.is_empty() {
             return None;
         }
         if self.blocks.len() <= k {
@@ -185,7 +194,7 @@ impl Cache {
         if block.key != key {
             block.spans.clear();
             block.ends.clear();
-            block.known = syntaxes().highlight(lang, code, &mut block.spans, &mut block.ends);
+            block.known = engine::highlight(lang, code, &mut block.spans, &mut block.ends);
             block.key = key;
         }
         block.known.then_some(&*block)
@@ -197,7 +206,7 @@ impl Cache {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "highlight"))]
 mod tests {
     use super::*;
 

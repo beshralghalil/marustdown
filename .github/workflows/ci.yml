@@ -29,6 +29,19 @@ jobs:
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
 
+  features:
+    name: Feature combinations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: taiki-e/install-action@cargo-hack
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo hack clippy --feature-powerset --all-targets --locked -- -D warnings
+      - run: cargo hack test --feature-powerset --locked
+
   msrv:
     name: MSRV (1.92)
     runs-on: ubuntu-latest

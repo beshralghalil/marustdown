@@ -21,7 +21,8 @@ color = true         # false renders without colors (same as --no-color or NO_CO
 icons = true         # false switches to the ASCII glyph set (same as --no-icons)
 status_bar = true    # show the status bar in the pager
 math = true          # render $…$ and $$…$$ LaTeX as Unicode; false shows the source
-diagrams = true      # draw ```mermaid blocks as diagrams; false shows the source
+diagrams = true      # draw ```mermaid and [renderers] blocks; false shows their source
+renderer_timeout = 3000  # milliseconds (1-60000) a [renderers] command may take before its block shows as code
 watch = false        # reload the file when it changes on disk (same as --watch)
 
 # Named colors are defined by the theme preset. You can override or add any here:
@@ -45,7 +46,7 @@ emphasis = { italic = true }
 strike = { strike = true }
 code = { fg = "accent", bg = "surface" }
 math = { fg = "teal" }
-diagram = {}                     # labels inside Mermaid diagrams
+diagram = {}                     # labels in Mermaid and [renderers] blocks
 diagram_border = { fg = "muted" } # boxes, lines and arrows
 link = { fg = "accent", underline = true }
 link_icon = { fg = "muted" }
@@ -113,6 +114,17 @@ alert_warning = " WARNING"
 alert_caution = " CAUTION"
 breadcrumb = " › "
 separator = " │ "
+
+# Programs that draw fenced code blocks, by fence language. The block's source goes to the
+# program's stdin and its output replaces the code box; if it fails or times out, the code
+# is shown. A command is a string split on spaces, or a list of arguments. No shell is used.
+# MAR_LANG (lowercase), MAR_WIDTH (columns available) and MAR_ASCII (1 with icons off) are set.
+# A renderer for mermaid replaces the built-in one. Renderers also run on documents you
+# didn't write, so only use programs that are safe on untrusted input.
+#   [renderers]
+#   dot = "graph-easy --as=boxart"
+#   plantuml = ["env", "PLANTUML_SECURITY_PROFILE=SANDBOX", "plantuml", "-tutxt", "-pipe"]
+[renderers]
 
 # Key bindings. Each action takes a list of keys:
 #   a character ("j", "G", "/"), a sequence of characters ("]]"),

@@ -405,6 +405,7 @@ dependencies = [
  "clap_mangen",
  "crossterm",
  "latex-to-unicode",
+ "libc",
  "memmap2",
  "mermaid-text",
  "pulldown-cmark",
