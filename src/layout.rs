@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Write as _;
+use std::mem;
 use std::ops::Range;
 
 use pulldown_cmark::{
@@ -10,7 +11,7 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::blocks::{self, Context};
 use crate::config::Styles;
-use crate::doc::{Document, Task};
+use crate::doc::{Document, Picture, Task};
 use crate::highlight::{self, Span, Token};
 #[cfg(feature = "math")]
 use crate::math;
@@ -33,9 +34,32 @@ pub struct Cache {
     blocks: blocks::Cache,
 }
 
+/// The cells an image takes when drawn as a picture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fit {
+    pub id: u32,
+    pub cols: u16,
+    pub rows: u16,
+}
+
+/// Sizes images for the layout, so an image alone in its paragraph becomes a picture.
+pub trait Pictures {
+    /// The picture for the image at `url` in at most `cols` columns; `None` keeps its
+    /// alt text.
+    fn fit(&mut self, url: &str, cols: usize) -> Option<Fit>;
+}
+
 /// Lays `src` out into `doc` at `width` columns.
-pub fn build(doc: &mut Document, cache: &mut Cache, src: &str, width: usize, theme: &Theme) {
-    Builder::new(doc, cache, theme, width).run(src);
+pub fn build(
+    doc: &mut Document,
+    cache: &mut Cache,
+    src: &str,
+    width: usize,
+    theme: &Theme,
+    pictures: Option<&mut dyn Pictures>,
+) {
+    let pictures = pictures.map(|p| p as &mut dyn Pictures);
+    Builder::new(doc, cache, theme, width, pictures).run(src);
     cache.syntax.truncate(doc.code_blocks.len());
 }
 
@@ -220,6 +244,48 @@ impl<'a> Events<'a> {
         self.ahead.pop_front().or_else(|| self.parser.next())
     }
 
+    /// Event `i` ahead of the current position.
+    fn peek(&mut self, i: usize) -> Option<&Event<'a>> {
+        while self.ahead.len() <= i {
+            let event = self.parser.next()?;
+            self.ahead.push_back(event);
+        }
+        Some(&self.ahead[i].0)
+    }
+
+    /// The image filling the paragraph whose `Start` was just consumed, if nothing but
+    /// whitespace or one link around it shares the paragraph.
+    fn lone_image(&mut self) -> Option<String> {
+        let (mut url, mut depth, mut links) = (None, 0, 0);
+        for i in 0.. {
+            match self.peek(i)? {
+                Event::End(TagEnd::Paragraph) => break,
+                Event::Start(Tag::Image { .. }) if depth > 0 || url.is_some() => return None,
+                Event::Start(Tag::Image { dest_url, .. }) => {
+                    url = Some(dest_url.to_string());
+                    depth = 1;
+                }
+                Event::End(TagEnd::Image) => depth = 0,
+                _ if depth > 0 => {}
+                Event::Start(Tag::Link { .. }) if links == 0 && url.is_none() => links = 1,
+                Event::End(TagEnd::Link) if links == 1 && url.is_some() => links = 2,
+                Event::Text(t) if t.trim().is_empty() => {}
+                Event::SoftBreak | Event::HardBreak => {}
+                _ => return None,
+            }
+        }
+        url.filter(|_| links != 1)
+    }
+
+    /// Skips to the end of the current paragraph.
+    fn skip_paragraph(&mut self) {
+        while let Some((event, _)) = self.next() {
+            if matches!(event, Event::End(TagEnd::Paragraph)) {
+                break;
+            }
+        }
+    }
+
     /// Items in the list whose `Start` was just consumed.
     fn count_items(&mut self) -> u64 {
         let (mut depth, mut items) = (0, 0);
@@ -249,10 +315,12 @@ struct List {
 
 struct Table {
     aligns: Vec<Alignment>,
-    cells: Vec<(usize, usize)>, // ranges in the inline scratch
-    rows: Vec<usize>,           // cell count at the end of each row
+    cells: Vec<(usize, usize)>,  // ranges in the inline scratch
+    images: Vec<Option<String>>, // per cell, the image filling it
+    rows: Vec<usize>,            // cell count at the end of each row
     head: bool,
     cell_start: usize,
+    cell_images: Vec<(String, usize, usize)>, // images of the open cell, with their range
 }
 
 struct Builder<'a, 'd> {
@@ -276,6 +344,7 @@ struct Builder<'a, 'd> {
     slug_counts: HashMap<String, u32>,
     breaks: Vec<u32>,
     cache: &'d mut Cache,
+    pictures: Option<&'d mut dyn Pictures>,
     norm: String, // the open code block with tabs expanded and controls replaced
     num: String,
     natural: Vec<usize>,
@@ -285,7 +354,13 @@ struct Builder<'a, 'd> {
 }
 
 impl<'a, 'd> Builder<'a, 'd> {
-    fn new(doc: &'d mut Document, cache: &'d mut Cache, theme: &'a Theme, width: usize) -> Self {
+    fn new(
+        doc: &'d mut Document,
+        cache: &'d mut Cache,
+        theme: &'a Theme,
+        width: usize,
+        pictures: Option<&'d mut dyn Pictures>,
+    ) -> Self {
         Builder {
             out: Out {
                 doc,
@@ -313,6 +388,7 @@ impl<'a, 'd> Builder<'a, 'd> {
             slug_counts: HashMap::new(),
             breaks: Vec::new(),
             cache,
+            pictures,
             norm: String::new(),
             num: String::new(),
             natural: Vec::new(),
@@ -376,7 +452,15 @@ impl<'a, 'd> Builder<'a, 'd> {
     fn start(&mut self, tag: Tag, events: &mut Events) {
         let s = &self.theme.styles;
         match tag {
-            Tag::Paragraph => self.block(),
+            Tag::Paragraph => {
+                self.block();
+                if let Some(url) = events.lone_image()
+                    && self.picture(&url)
+                {
+                    events.skip_paragraph();
+                    self.gap = true;
+                }
+            }
             Tag::Heading { level, .. } => {
                 self.block();
                 self.heading_text.clear();
@@ -407,14 +491,17 @@ impl<'a, 'd> Builder<'a, 'd> {
                 self.table = Some(Table {
                     aligns,
                     cells: Vec::new(),
+                    images: Vec::new(),
                     rows: Vec::new(),
                     head: false,
                     cell_start: 0,
+                    cell_images: Vec::new(),
                 });
             }
             Tag::TableCell => {
                 if let Some(t) = &mut self.table {
                     t.cell_start = self.inline.text.len();
+                    t.cell_images.clear();
                 }
             }
             Tag::Emphasis => self.push_style(s.emphasis),
@@ -432,6 +519,10 @@ impl<'a, 'd> Builder<'a, 'd> {
                 self.push_style(Style { link: id, ..s.link });
             }
             Tag::Image { dest_url, .. } => {
+                if let Some(t) = &mut self.table {
+                    let at = self.inline.text.len();
+                    t.cell_images.push((dest_url.to_string(), at, at));
+                }
                 let id = self.link_id(&dest_url);
                 let style = Style {
                     link: id,
@@ -492,10 +583,25 @@ impl<'a, 'd> Builder<'a, 'd> {
             }
             TagEnd::TableCell => {
                 if let Some(t) = &mut self.table {
-                    t.cells.push((t.cell_start, self.inline.text.len()));
+                    let (start, end) = (t.cell_start, self.inline.text.len());
+                    let blank = |a: usize, b: usize| self.inline.text[a..b].trim().is_empty();
+                    let image = match t.cell_images.as_mut_slice() {
+                        [(url, a, b)] if blank(start, *a) && blank(*b, end) => Some(mem::take(url)),
+                        _ => None,
+                    };
+                    t.cells.push((start, end));
+                    t.images.push(image);
                 }
             }
-            TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough | TagEnd::Image => {
+            TagEnd::Image => {
+                self.styles.pop();
+                if let Some((_, _, end)) =
+                    self.table.as_mut().and_then(|t| t.cell_images.last_mut())
+                {
+                    *end = self.inline.text.len();
+                }
+            }
+            TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough => {
                 self.styles.pop();
             }
             TagEnd::Link => {
@@ -737,6 +843,29 @@ impl<'a, 'd> Builder<'a, 'd> {
         self.gap = true;
     }
 
+    /// Leaves room for the image at `url`, to be drawn over these lines; false when it
+    /// can't be shown.
+    fn picture(&mut self, url: &str) -> bool {
+        let avail = self.out.avail();
+        let Some(fit) = self.pictures.as_mut().and_then(|p| p.fit(url, avail)) else {
+            return false;
+        };
+        let first = self.out.line();
+        for _ in 0..fit.rows {
+            self.out.begin_line();
+            self.out.doc.pad(fit.cols as usize, Style::default());
+            self.out.end_line();
+        }
+        self.out.doc.pictures.push(Picture {
+            first,
+            rows: fit.rows,
+            col: self.out.indent.min(u16::MAX as usize) as u16,
+            cols: fit.cols,
+            id: fit.id,
+        });
+        true
+    }
+
     /// Draws a fenced block through the renderer for its language, instead of a code box.
     /// False when there is none, rendering is off, or the renderer fails.
     fn rendered_block(&mut self) -> bool {
@@ -948,33 +1077,51 @@ impl<'a, 'd> Builder<'a, 'd> {
             widths,
             pieces,
             cell_pieces,
+            pictures,
             ..
         } = self;
         let (s, b) = (&theme.styles, &theme.glyphs.table_box);
         let n = tb.aligns.len();
+        let budget = out.avail().saturating_sub(3 * n + 1);
+        let mut fit = |url: &Option<String>, cols: usize| {
+            let url = url.as_deref()?;
+            pictures.as_mut()?.fit(url, cols)
+        };
 
         natural.clear();
         natural.resize(n, 0);
-        for row in rows(&tb) {
+        for (row, images) in rows(&tb) {
             for (c, &(a, z)) in row.iter().take(n).enumerate() {
-                let w = inline.text[a..z]
-                    .split('\n')
-                    .map(UnicodeWidthStr::width)
-                    .max()
-                    .unwrap_or(0);
+                let w = match fit(&images[c], budget) {
+                    Some(f) => f.cols as usize,
+                    None => inline.text[a..z]
+                        .split('\n')
+                        .map(UnicodeWidthStr::width)
+                        .max()
+                        .unwrap_or(0),
+                };
                 natural[c] = natural[c].max(w);
             }
         }
-        table::column_widths(natural, out.avail().saturating_sub(3 * n + 1), widths);
+        table::column_widths(natural, budget, widths);
 
         let border = s.table_border;
+        let border_w = b[9].width();
         rule_row(out, widths, [&b[0], &b[1], &b[2]], &b[10], border);
-        for (r, row) in rows(&tb).enumerate() {
+        let mut fits = Vec::with_capacity(n);
+        for (r, (row, images)) in rows(&tb).enumerate() {
             pieces.clear();
             cell_pieces.clear();
+            fits.clear();
+            fits.extend(
+                widths
+                    .iter()
+                    .enumerate()
+                    .map(|(c, &w)| fit(images.get(c)?, w)),
+            );
             for (c, &w) in widths.iter().enumerate() {
                 let from = pieces.len();
-                if let Some(&(a, z)) = row.get(c) {
+                if let (None, Some(&(a, z))) = (fits[c], row.get(c)) {
                     wrap::breaks(&inline.text[a..z], w, breaks);
                     let mut start = a;
                     for end in breaks.iter().map(|&x| a + x as usize).chain([z]) {
@@ -990,14 +1137,21 @@ impl<'a, 'd> Builder<'a, 'd> {
             let height = cell_pieces
                 .iter()
                 .map(ExactSizeIterator::len)
+                .chain(fits.iter().flatten().map(|f| f.rows as usize))
                 .max()
                 .unwrap_or(0)
                 .max(1);
+            let first = out.line();
             for j in 0..height {
                 out.begin_line();
                 out.doc.push(&b[9], border);
                 for (c, &w) in widths.iter().enumerate() {
                     out.doc.push(" ", Style::default());
+                    if fits[c].is_some() {
+                        out.doc.pad(w + 1, Style::default());
+                        out.doc.push(&b[9], border);
+                        continue;
+                    }
                     match cell_pieces[c].clone().nth(j).map(|k| pieces[k]) {
                         Some((a, z)) => {
                             let slack = w.saturating_sub(inline.text[a..z].width());
@@ -1012,6 +1166,20 @@ impl<'a, 'd> Builder<'a, 'd> {
                 }
                 out.end_line();
             }
+            let mut col = out.indent + border_w;
+            for (c, &w) in widths.iter().enumerate() {
+                if let Some(f) = fits[c] {
+                    let left = table::pad(tb.aligns[c], w - f.cols as usize).0;
+                    out.doc.pictures.push(Picture {
+                        first,
+                        rows: f.rows,
+                        col: (col + 1 + left).min(u16::MAX as usize) as u16,
+                        cols: f.cols,
+                        id: f.id,
+                    });
+                }
+                col += w + 2 + border_w;
+            }
             if head {
                 rule_row(out, widths, [&b[3], &b[4], &b[5]], &b[10], border);
             }
@@ -1021,9 +1189,10 @@ impl<'a, 'd> Builder<'a, 'd> {
     }
 }
 
-fn rows(tb: &Table) -> impl Iterator<Item = &[(usize, usize)]> {
+/// Each row's cells and the images filling them.
+fn rows(tb: &Table) -> impl Iterator<Item = (&[(usize, usize)], &[Option<String>])> {
     tb.rows.iter().scan(0, |start, &end| {
-        let row = &tb.cells[*start..end];
+        let row = (&tb.cells[*start..end], &tb.images[*start..end]);
         *start = end;
         Some(row)
     })
@@ -1276,6 +1445,87 @@ mod tests {
     fn loose_list_gap_keeps_quote_bar() {
         let doc = layout("> one\n>\n> two", 40);
         assert_eq!(plain(&doc), "▌ one\n▌\n▌ two");
+    }
+
+    /// Images named `*.png` are 3 rows tall and at most 10 columns wide.
+    struct Fixed;
+
+    impl Pictures for Fixed {
+        fn fit(&mut self, url: &str, cols: usize) -> Option<Fit> {
+            url.ends_with(".png").then_some(Fit {
+                id: 7,
+                cols: cols.min(10) as u16,
+                rows: 3,
+            })
+        }
+    }
+
+    fn with_pictures(src: &str) -> Document {
+        let mut doc = Document::new();
+        doc.layout_with(src, 40, &test_theme(), Some(&mut Fixed));
+        doc
+    }
+
+    #[test]
+    fn lone_images_become_pictures() {
+        let doc = with_pictures("before\n\n![logo](a.png)\n\nafter");
+        assert_eq!(plain(&doc), "before\n\n\n\n\n\nafter");
+        let picture = Picture {
+            first: 2,
+            rows: 3,
+            col: 0,
+            cols: 10,
+            id: 7,
+        };
+        assert_eq!(doc.pictures, [picture]);
+        assert_eq!(doc.pictures_at(4).collect::<Vec<_>>(), [&picture]);
+        assert_eq!(doc.pictures_at(5).count(), 0);
+        assert_eq!(
+            with_pictures("[![logo](a.png)](https://x)").pictures.len(),
+            1
+        );
+    }
+
+    #[test]
+    fn pictures_keep_their_indent() {
+        let doc = with_pictures("> ![logo](a.png)");
+        assert_eq!(doc.pictures[0].col, 2);
+        assert_eq!(plain(&doc).lines().next(), Some("▌"));
+    }
+
+    #[test]
+    fn table_cells_hold_pictures_sized_to_their_column() {
+        let doc = with_pictures(
+            "| a | b |\n|---|---|\n| ![x](a.png) | ![y](b.png) |\n| c | ![z](z.gif) |",
+        );
+        let cells: Vec<_> = doc
+            .pictures
+            .iter()
+            .map(|p| (p.first, p.col, p.cols, p.rows))
+            .collect();
+        assert_eq!(cells, [(3, 2, 10, 3), (3, 15, 10, 3)]);
+        assert_eq!(doc.pictures_at(5).count(), 2);
+        let text = plain(&doc);
+        let lines: Vec<_> = text.lines().collect();
+        assert_eq!(lines[3], lines[5]);
+        assert_eq!(lines[3].trim_end(), "│            │            │");
+        assert!(lines[6].contains("🖼"));
+    }
+
+    #[test]
+    fn images_sharing_a_paragraph_stay_text() {
+        for src in [
+            "see ![logo](a.png)",
+            "![a](a.png) ![b](b.png)",
+            "[![a](a.png)](u) [x](v)",
+            "![missing](a.gif)",
+            "# ![logo](a.png)",
+            "| ![a](a.png) and text |\n|---|",
+        ] {
+            let doc = with_pictures(src);
+            assert!(doc.pictures.is_empty(), "{src}");
+            assert!(plain(&doc).contains('🖼'), "{src}");
+        }
     }
 
     #[test]

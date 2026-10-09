@@ -17,9 +17,16 @@ Set WindowBar Colorful
 Set Theme "GitHub Dark"
 Set TypingSpeed 90ms
 
+# Hidden setup: the fresh build, a copy of the demo, and a config with half-blocks,
+# since VHS screenshots can't capture sixel or iTerm2 images.
+Hide
+Type `export PATH=$PWD/target/release:$PATH XDG_CONFIG_HOME=$(mktemp -d) && cd $(mktemp -d)` Enter
+Type `mkdir docs $XDG_CONFIG_HOME/marustdown && cp -r $OLDPWD/docs/demo.md $OLDPWD/docs/images docs` Enter
+Type `printf '[layout]\nimages = "blocks"\n' > $XDG_CONFIG_HOME/marustdown/config.toml && clear` Enter
+Show
+
 Type "mar docs/demo.md" Enter
 Sleep 1s
-Show
 
 # Highlighted code
 Sleep 2s
@@ -53,6 +60,14 @@ Enter
 Sleep 1.5s
 Screenshot docs/screenshots/math-diagrams.png
 Sleep 1s
+
+# Images
+Type "o"
+Sleep 500ms
+Type "images"
+Sleep 800ms
+Enter
+Sleep 2.5s
 
 Type "q"
 Sleep 300ms

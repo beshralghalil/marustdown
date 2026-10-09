@@ -13,6 +13,8 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::anim::{self, Glide};
 use crate::doc::Document;
+#[cfg(feature = "images")]
+use crate::images::{self, Images, Update};
 use crate::keys::{Action, Key, Keymap};
 use crate::links::{self, Target};
 use crate::render::{self, Decor, Window};
@@ -24,6 +26,9 @@ use crate::watch::{self, Change, Watch};
 use crate::wrap;
 
 const HSCROLL_STEP: usize = 8;
+
+/// How often the pager checks on images loading in the background.
+const LOADING: Duration = Duration::from_millis(30);
 
 const ENTER: &str = "\x1b[?1049h\x1b[?25l\x1b[?7l"; // alt screen, hide cursor, no autowrap
 const LEAVE: &str = "\x1b[?7h\x1b[?25h\x1b[?1049l";
@@ -58,6 +63,11 @@ pub fn run(
     write_tty(ENTER)?;
 
     let mut pager = Pager::new(source, path, theme, keys, terminal::size()?, watching);
+    #[cfg(feature = "images")]
+    {
+        pager.images = Images::new(&theme.layout);
+    }
+    pager.relayout();
     let mut out = io::stdout().lock();
     let mut size = pager.size;
     let mut dirty = true;
@@ -70,12 +80,10 @@ pub fn run(
             pager.draw(&mut out)?;
             dirty = false;
         }
-        if pager.glide.is_some() && !event::poll(anim::FRAME)? {
-            dirty = true;
-            continue;
-        }
-        if pager.watch.is_some() && !event::poll(watch::INTERVAL)? {
-            dirty = pager.check_file();
+        if let Some(wait) = pager.wait()
+            && !event::poll(wait)?
+        {
+            dirty |= pager.tick();
             continue;
         }
         match event::read()? {
@@ -175,6 +183,8 @@ struct Pager<'a> {
     hscroll: Vec<usize>, // horizontal offset of each wide block
     watching: bool,
     watch: Option<Watch>, // the shown file, while watching
+    #[cfg(feature = "images")]
+    images: Option<Images>,
     glide: Option<Glide>, // drawn top line while a jump animates; `top` is already the target
     history: Vec<Page>,
     mode: Mode,
@@ -216,6 +226,8 @@ impl<'a> Pager<'a> {
             hscroll: Vec::new(),
             watching,
             watch: None,
+            #[cfg(feature = "images")]
+            images: None,
             glide: None,
             history: Vec::new(),
             mode: Mode::Normal,
@@ -226,13 +238,25 @@ impl<'a> Pager<'a> {
             bar: String::new(),
         };
         pager.rewatch();
-        pager.relayout();
         pager
     }
 
     fn relayout(&mut self) {
         (self.width, self.margin) = self.theme.layout.fit(self.size.0 as usize);
-        self.doc.layout(self.source.text(), self.width, self.theme);
+        #[cfg(feature = "images")]
+        let pictures = {
+            let rows = self.rows();
+            let base = self.path.as_deref().and_then(Path::parent);
+            self.images.as_mut().map(|images| {
+                images.set_view(base.unwrap_or(Path::new("")), rows);
+                images.reset(&mut self.osc);
+                images as &mut dyn crate::layout::Pictures
+            })
+        };
+        #[cfg(not(feature = "images"))]
+        let pictures = None;
+        let text = self.source.text();
+        self.doc.layout_with(text, self.width, self.theme, pictures);
         self.selected = None;
         self.hscroll.clear();
         self.hscroll.resize(self.doc.wides.len(), 0);
@@ -274,11 +298,67 @@ impl<'a> Pager<'a> {
     }
 
     fn resize(&mut self, size: (u16, u16)) {
-        let offset = self.doc.source_offset(self.cursor);
         self.size = size;
+        #[cfg(feature = "images")]
+        if let Some(images) = &mut self.images {
+            images.resize(&mut self.osc);
+        }
+        self.refit();
+    }
+
+    /// Lays out again, keeping the cursor on the same text.
+    fn refit(&mut self) {
+        let offset = self.doc.source_offset(self.cursor);
         self.relayout();
         self.cursor = self.doc.line_at_offset(offset);
         self.follow();
+    }
+
+    /// How long to wait for a key before `tick` has work to do.
+    fn wait(&self) -> Option<Duration> {
+        if self.glide.is_some() {
+            Some(anim::FRAME)
+        } else if self.loading() {
+            Some(LOADING)
+        } else {
+            self.watch.as_ref().map(|_| watch::INTERVAL)
+        }
+    }
+
+    /// Advances animations and background work; true if the screen needs redrawing.
+    fn tick(&mut self) -> bool {
+        if self.glide.is_some() {
+            return true;
+        }
+        let loaded = self.receive_images();
+        self.check_file() || loaded
+    }
+
+    #[cfg(feature = "images")]
+    fn loading(&self) -> bool {
+        self.images.as_ref().is_some_and(Images::loading)
+    }
+
+    #[cfg(not(feature = "images"))]
+    fn loading(&self) -> bool {
+        false
+    }
+
+    #[cfg(feature = "images")]
+    fn receive_images(&mut self) -> bool {
+        match self.images.as_mut().map_or(Update::None, Images::receive) {
+            Update::None => false,
+            Update::Redraw => true,
+            Update::Relayout => {
+                self.refit();
+                true
+            }
+        }
+    }
+
+    #[cfg(not(feature = "images"))]
+    fn receive_images(&mut self) -> bool {
+        false
     }
 
     fn say(&mut self, message: impl Into<String>) {
@@ -615,6 +695,10 @@ impl<'a> Pager<'a> {
         if let Err(e) = enter() {
             return self.say(format!("terminal: {e}"));
         }
+        #[cfg(feature = "images")]
+        if let Some(images) = &mut self.images {
+            images.reenter(&mut self.osc);
+        }
         if let Err(e) = status {
             self.say(format!("{program}: {e}"));
         }
@@ -882,6 +966,7 @@ impl<'a> Pager<'a> {
             Mode::Outline(o) => self.draw_outline(o, &mut buf),
             _ => self.draw_lines(top.unwrap_or(self.top), &mut buf),
         }
+        self.draw_images(top.unwrap_or(self.top), &mut buf);
         if self.theme.layout.status_bar || !matches!(self.mode, Mode::Normal) {
             self.draw_status(&mut buf);
         } else {
@@ -895,7 +980,7 @@ impl<'a> Pager<'a> {
 
     fn draw_lines(&self, top: usize, buf: &mut String) {
         let (t, cursor_style) = (self.theme, self.theme.styles.cursor);
-        let mut labels = Vec::new();
+        let (mut labels, mut holes) = (Vec::new(), Vec::new());
         let hints = match &self.mode {
             Mode::Hints(h) => Some((h, h.typed.to_ascii_lowercase())),
             _ => None,
@@ -905,6 +990,13 @@ impl<'a> Pager<'a> {
             let i = top + row;
             if i < self.doc.len() {
                 labels.clear();
+                // A picture's cells belong to the image drawn over them.
+                holes.clear();
+                holes.extend(
+                    self.doc
+                        .pictures_at(i)
+                        .map(|p| (p.col as usize, (p.col + p.cols) as usize)),
+                );
                 if let Some((h, tag)) = &hints {
                     labels.extend(
                         h.targets
@@ -930,6 +1022,7 @@ impl<'a> Pager<'a> {
                         .wide_at(i)
                         .map(|k| Window::new(&self.doc, k, i, self.hscroll[k])),
                     plain: false,
+                    holes: &holes,
                 };
                 render::pad(buf, self.margin);
                 render::line(&self.doc, i, t, &decor, buf);
@@ -942,6 +1035,28 @@ impl<'a> Pager<'a> {
             buf.push_str("\x1b[K");
         }
     }
+
+    /// Paints the pictures in view over the lines just drawn; the outline hides them.
+    #[cfg(feature = "images")]
+    fn draw_images(&mut self, top: usize, buf: &mut String) {
+        let view = images::View {
+            top,
+            rows: self.rows(),
+            margin: self.margin,
+            screen_rows: self.size.1 as usize,
+            moving: self.glide.is_some(),
+        };
+        let Some(images) = &mut self.images else {
+            return;
+        };
+        match self.mode {
+            Mode::Outline(_) => images.reset(buf),
+            _ => images.draw(&self.doc, &view, buf),
+        }
+    }
+
+    #[cfg(not(feature = "images"))]
+    fn draw_images(&mut self, _: usize, _: &mut String) {}
 
     fn draw_outline(&self, o: &Outline, buf: &mut String) {
         let (t, s) = (self.theme, &self.theme.styles);

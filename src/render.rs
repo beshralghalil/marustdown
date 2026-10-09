@@ -27,6 +27,7 @@ pub struct Decor<'a> {
     pub labels: &'a [(usize, &'a str)], // hint tags inserted before these offsets, sorted
     pub window: Option<Window>,         // the visible part of a wide line
     pub plain: bool,                    // text only, no escape sequences
+    pub holes: &'a [(usize, usize)],    // column ranges left untouched, for pictures
 }
 
 /// The visible part of a wide line: bytes `start..end` scroll, and `view` of their
@@ -62,6 +63,7 @@ pub fn line(doc: &Document, i: usize, theme: &Theme, decor: &Decor, out: &mut St
     let s = &theme.styles;
     let mut pen = Pen::new(theme, &doc.links, out);
     pen.plain = decor.plain;
+    pen.holes = decor.holes;
     let mut hits = decor
         .search
         .into_iter()
@@ -210,7 +212,7 @@ pub fn clipboard(text: &str, out: &mut String) {
     out.push('\x07');
 }
 
-fn base64(data: &[u8], out: &mut String) {
+pub fn base64(data: &[u8], out: &mut String) {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     for chunk in data.chunks(3) {
         let b = |i: usize| chunk.get(i).copied().unwrap_or(0) as u32;
@@ -231,6 +233,9 @@ struct Pen<'a> {
     style: Style,
     link: u16,
     plain: bool,
+    holes: &'a [(usize, usize)],
+    col: usize,  // columns put so far, tracked only with holes
+    skip: usize, // columns of a hole still to move past
 }
 
 impl<'a> Pen<'a> {
@@ -242,10 +247,39 @@ impl<'a> Pen<'a> {
             style: Style::default(),
             link: 0,
             plain: false,
+            holes: &[],
+            col: 0,
+            skip: 0,
         }
     }
 
+    /// Writes `s`, moving the cursor over the columns that fall in holes.
     fn put(&mut self, s: &str, style: Style) {
+        if self.holes.is_empty() {
+            return self.write(s, style);
+        }
+        let mut from = 0;
+        for (i, c) in s.char_indices() {
+            let col = self.col;
+            self.col += c.width().unwrap_or(0);
+            if self.holes.iter().any(|&(a, b)| (a..b).contains(&col)) {
+                self.write(&s[from..i], style);
+                self.skip += self.col - col;
+                from = i + c.len_utf8();
+            } else {
+                self.step();
+            }
+        }
+        self.write(&s[from..], style);
+    }
+
+    fn step(&mut self) {
+        if self.skip > 0 {
+            let _ = write!(self.out, "\x1b[{}C", std::mem::take(&mut self.skip));
+        }
+    }
+
+    fn write(&mut self, s: &str, style: Style) {
         if s.is_empty() {
             return;
         }
@@ -311,7 +345,8 @@ impl<'a> Pen<'a> {
         out.push('m');
     }
 
-    fn finish(self) {
+    fn finish(mut self) {
+        self.step();
         if self.plain {
             return;
         }
@@ -398,6 +433,25 @@ mod tests {
             &mut out,
         );
         out
+    }
+
+    #[test]
+    fn holes_are_stepped_over() {
+        let theme = test_theme();
+        let mut doc = Document::new();
+        doc.layout("abc日ef", 80, &theme);
+        let hole = |holes: &[(usize, usize)]| {
+            let mut out = String::new();
+            let decor = Decor {
+                holes,
+                ..Decor::default()
+            };
+            line(&doc, 0, &theme, &decor, &mut out);
+            out
+        };
+        assert_eq!(hole(&[(1, 3)]), "a\x1b[2C日ef");
+        assert_eq!(hole(&[(3, 4)]), "abc\x1b[2Cef");
+        assert_eq!(hole(&[(0, 1), (6, 8)]), "\x1b[1Cbc日e\x1b[1C");
     }
 
     #[test]

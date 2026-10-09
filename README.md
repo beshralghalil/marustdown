@@ -7,7 +7,7 @@
 A fast terminal markdown viewer. It renders GitHub-flavored markdown with real
 typography.
 
-![marustdown: highlighted code, checking off a task, and jumping through the outline](docs/screenshots/demo.gif)
+![marustdown: highlighted code, checking off a task, jumping through the outline, and an image](docs/screenshots/demo.gif)
 
 ## Features
 
@@ -28,6 +28,9 @@ typography.
 - **Mermaid diagrams**: ```` ```mermaid ```` blocks are drawn with box-drawing characters:
   flowcharts, sequence, state, class, pie, gantt and more. Diagrams that fail to parse
   show their source.
+- **Images** in the pager, including in table cells, scaled to fit the column. They use
+  kitty graphics, iTerm2 inline images or sixel, whichever the terminal supports, and
+  colored half-blocks everywhere else. See [Images](#images).
 - **Custom renderers**: draw any fenced block with a program of your choice, such as
   Graphviz or PlantUML, through [`[renderers]`](docs/configuration.md#renderers).
 - **Horizontal scrolling**: code blocks, diagrams and formulas wider than the screen
@@ -84,8 +87,8 @@ Alert icons use [Nerd Font](https://www.nerdfonts.com/) glyphs. Without one, run
 
 ### Build options
 
-Highlighting, math and Mermaid are Cargo features, all on by default. Leave out the ones
-you don't need for a smaller binary:
+Highlighting, images, math and Mermaid are Cargo features, all on by default. Leave out
+the ones you don't need for a smaller binary:
 
 ```sh
 cargo install marustdown --locked --no-default-features --features math
@@ -94,12 +97,14 @@ cargo install marustdown --locked --no-default-features --features math
 | Feature | Adds | Build needs |
 |---|---|---|
 | `highlight` | Syntax highlighting for about 220 languages | a C compiler |
+| `images` | Images in the pager (PNG, JPEG, GIF, WebP) | |
 | `math` | LaTeX math as Unicode | |
 | `mermaid` | Mermaid diagrams | |
 
-Without a feature, its blocks show as plain code or text. A `[renderers]` command can
-still draw ```` ```mermaid ```` blocks (for example `mermaid = "mermaid-ascii"`). Release
-binaries include every feature; `mar --version` lists the ones a build has.
+Without a feature, its content shows as plain code or text, and images as their alt
+text. A `[renderers]` command can still draw ```` ```mermaid ```` blocks (for example
+`mermaid = "mermaid-ascii"`). Release binaries include every feature; `mar --version`
+lists the ones a build has.
 
 ## Usage
 
@@ -165,6 +170,28 @@ toggle = ["space"]
 
 The full reference is in [docs/configuration.md](docs/configuration.md), and every
 default is in [assets/config.toml](assets/config.toml).
+
+## Images
+
+An image alone in its paragraph or table cell is drawn in the pager, scaled down to fit
+the column and `image_height` percent of the window. Other images, and every image in
+`--cat` output, show their alt text.
+
+mar picks the protocol from `$TERM` and `$TERM_PROGRAM`, then asks the terminal what it
+supports, much like [Yazi](https://yazi-rs.github.io/docs/image-preview/):
+
+| Terminal | Protocol |
+|---|---|
+| kitty, Ghostty, Konsole | kitty graphics |
+| iTerm2, WezTerm, Warp, mintty, Bobcat | iTerm2 inline images |
+| VS Code, Tabby | iTerm2 inline images, once images are enabled (VS Code: `terminal.integrated.enableImages`) |
+| foot, Windows Terminal, xterm (`-ti vt340`), mlterm, others with sixel | sixel |
+| Inside tmux or zellij | sixel if the multiplexer supports it |
+| Anything else | colored half-blocks |
+
+Set `images` in [`[layout]`](docs/configuration.md#layout) to force a protocol, or to
+`"off"` for alt text only. Remote images are only fetched when `remote_images = true`;
+mar then downloads them with `curl` in the background.
 
 ## Notes
 

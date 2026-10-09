@@ -50,6 +50,17 @@ pub struct Wide {
     windows: u32, // index of the first line's window
 }
 
+/// Lines `first..first + rows` where an image is drawn over columns `col..col + cols`,
+/// counted from the content's left edge. `id` names the image for whoever draws it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Picture {
+    pub first: u32,
+    pub rows: u16,
+    pub col: u16,
+    pub cols: u16,
+    pub id: u32,
+}
+
 /// Laid-out text in three flat buffers: plain text, style runs, and line ends.
 #[derive(Default)]
 pub struct Document {
@@ -61,6 +72,7 @@ pub struct Document {
     pub code_blocks: Vec<CodeBlock>,
     pub tasks: Vec<Task>,
     pub wides: Vec<Wide>,
+    pub pictures: Vec<Picture>,
     windows: Vec<(u16, u16)>, // byte range of each wide line's scrolling part
     anchors: Vec<(u32, usize)>, // (line, source offset) at each block start
     code: String,
@@ -150,6 +162,17 @@ impl Document {
             .map(|_| k)
     }
 
+    /// Pictures drawn over `line`. Those sharing lines, as in a table row, start together.
+    pub fn pictures_at(&self, line: usize) -> impl Iterator<Item = &Picture> {
+        let end = self.pictures.partition_point(|p| p.first as usize <= line);
+        let first = end.checked_sub(1).map(|k| self.pictures[k].first);
+        self.pictures[..end]
+            .iter()
+            .rev()
+            .take_while(move |p| Some(p.first) == first)
+            .filter(move |p| line < p.first as usize + p.rows as usize)
+    }
+
     /// Byte range of the scrolling part of `line`, which belongs to wide block `k`.
     pub fn window(&self, k: usize, line: usize) -> (usize, usize) {
         let w = &self.wides[k];
@@ -186,6 +209,7 @@ impl Document {
         self.code_blocks.clear();
         self.tasks.clear();
         self.wides.clear();
+        self.pictures.clear();
         self.windows.clear();
         self.anchors.clear();
         self.code.clear();
@@ -193,9 +217,20 @@ impl Document {
     }
 
     pub fn layout(&mut self, src: &str, width: usize, theme: &Theme) {
+        self.layout_with(src, width, theme, None);
+    }
+
+    /// Lays out with images drawn as pictures where `pictures` can size them.
+    pub fn layout_with(
+        &mut self,
+        src: &str,
+        width: usize,
+        theme: &Theme,
+        pictures: Option<&mut dyn layout::Pictures>,
+    ) {
         self.clear();
         let mut cache = std::mem::take(&mut self.cache);
-        layout::build(self, &mut cache, src, width, theme);
+        layout::build(self, &mut cache, src, width, theme, pictures);
         self.cache = cache;
     }
 

@@ -4,6 +4,8 @@ mod cli;
 mod config;
 mod doc;
 mod highlight;
+#[cfg(feature = "images")]
+mod images;
 mod keys;
 mod layout;
 mod links;
@@ -12,6 +14,7 @@ mod math;
 #[cfg(feature = "mermaid")]
 mod mermaid;
 mod pager;
+mod process;
 mod render;
 mod safe;
 mod search;

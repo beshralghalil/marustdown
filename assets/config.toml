@@ -23,6 +23,9 @@ status_bar = true    # show the status bar in the pager
 math = true          # render $…$ and $$…$$ LaTeX as Unicode; false shows the source
 diagrams = true      # draw ```mermaid and [renderers] blocks; false shows their source
 renderer_timeout = 3000  # milliseconds (1-60000) a [renderers] command may take before its block shows as code
+images = "auto"      # pager images: auto, kitty, iterm, sixel, blocks (half-blocks) or off (alt text)
+image_height = 60    # percent of the window height an image may take
+remote_images = false  # fetch http(s) images with curl; false never contacts a server
 watch = false        # reload the file when it changes on disk (same as --watch)
 
 # Named colors are defined by the theme preset. You can override or add any here:

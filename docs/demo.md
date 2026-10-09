@@ -49,6 +49,13 @@ sequenceDiagram
     mar-->>You: rendered page
 ```
 
+## Images
+
+Pictures show inline: with kitty graphics, iTerm2 images or sixel where the terminal
+has them, and with colored half-blocks everywhere else.
+
+![Sunset over the mountains](images/sunset.png)
+
 ## Tasks
 
 - [x] Render markdown in the terminal

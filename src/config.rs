@@ -60,7 +60,24 @@ pub struct Layout {
     pub math: bool,
     pub diagrams: bool,
     pub renderer_timeout: u64,
+    #[cfg_attr(not(feature = "images"), allow(dead_code))]
+    pub images: ImageMode,
+    pub image_height: usize,
+    #[cfg_attr(not(feature = "images"), allow(dead_code))]
+    pub remote_images: bool,
     pub watch: bool,
+}
+
+/// How the pager draws images: a graphics protocol, half-blocks, or not at all.
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageMode {
+    Auto,
+    Kitty,
+    Iterm,
+    Sixel,
+    Blocks,
+    Off,
 }
 
 impl Layout {

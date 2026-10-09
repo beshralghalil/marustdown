@@ -21,8 +21,9 @@ Configuration: $XDG_CONFIG_HOME/marustdown/config.toml (usually ~/.config/marust
 Reference: https://github.com/beshralghalil/marustdown/blob/main/docs/configuration.md";
 
 /// Optional Cargo features, and whether this build has them.
-const FEATURES: [(&str, bool); 3] = [
+const FEATURES: [(&str, bool); 4] = [
     ("highlight", cfg!(feature = "highlight")),
+    ("images", cfg!(feature = "images")),
     ("math", cfg!(feature = "math")),
     ("mermaid", cfg!(feature = "mermaid")),
 ];

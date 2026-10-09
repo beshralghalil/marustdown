@@ -94,6 +94,9 @@ fn validate(cfg: &Config) -> Result<(), String> {
     if !(1..=60_000).contains(&l.renderer_timeout) {
         return Err("layout.renderer_timeout: must be between 1 and 60000 milliseconds".into());
     }
+    if !(1..=100).contains(&l.image_height) {
+        return Err("layout.image_height: must be between 1 and 100 percent".into());
+    }
     if l.scroll_duration > 1000 {
         return Err("layout.scroll_duration: at most 1000 milliseconds".into());
     }

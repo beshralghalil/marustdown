@@ -58,6 +58,9 @@ A theme file holds a `[colors]` table and may override any other table.
 | `watch` | `false` | Reload the file when it changes on disk; `--watch` / `--no-watch` override it |
 | `diagrams` | `true` | Draw ```` ```mermaid ```` and [`[renderers]`](#renderers) blocks; `false` shows their source |
 | `renderer_timeout` | `3000` | Milliseconds (1–60000) a `[renderers]` command may take before its block shows as code |
+| `images` | `"auto"` | How the pager draws images: `"auto"`, `"kitty"`, `"iterm"`, `"sixel"`, `"blocks"` (half-blocks) or `"off"` (alt text). See [Images](../README.md#images) (needs the `images` feature) |
+| `image_height` | `60` | Percent (1–100) of the window height an image may take |
+| `remote_images` | `false` | Fetch `http(s)` images with `curl`; when `false`, opening a file never contacts a server |
 
 ## `[colors]`
 
