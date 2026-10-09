@@ -28,6 +28,8 @@ typography.
 - **Mermaid diagrams**: ```` ```mermaid ```` blocks are drawn with box-drawing characters:
   flowcharts, sequence, state, class, pie, gantt and more. Diagrams that fail to parse
   show their source.
+- **Custom renderers**: draw any fenced block with a program of your choice, such as
+  Graphviz or PlantUML, through [`[renderers]`](docs/configuration.md#renderers).
 - **Horizontal scrolling**: code blocks, diagrams and formulas wider than the screen
   scroll sideways under the cursor instead of being cut off.
 - **Syntax highlighting** for about 220 languages, using syntect with bat's syntax
@@ -79,6 +81,25 @@ and put `mar` on your `PATH`. Each archive also contains the man page and shell 
 
 Alert icons use [Nerd Font](https://www.nerdfonts.com/) glyphs. Without one, run
 `mar --no-icons` or set `icons = false`.
+
+### Build options
+
+Highlighting, math and Mermaid are Cargo features, all on by default. Leave out the ones
+you don't need for a smaller binary:
+
+```sh
+cargo install marustdown --locked --no-default-features --features math
+```
+
+| Feature | Adds | Build needs |
+|---|---|---|
+| `highlight` | Syntax highlighting for about 220 languages | a C compiler |
+| `math` | LaTeX math as Unicode | |
+| `mermaid` | Mermaid diagrams | |
+
+Without a feature, its blocks show as plain code or text. A `[renderers]` command can
+still draw ```` ```mermaid ```` blocks (for example `mermaid = "mermaid-ascii"`). Release
+binaries include every feature; `mar --version` lists the ones a build has.
 
 ## Usage
 

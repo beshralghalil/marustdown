@@ -1,13 +1,16 @@
 mod anim;
+mod blocks;
 mod cli;
 mod config;
-mod diagram;
 mod doc;
 mod highlight;
 mod keys;
 mod layout;
 mod links;
+#[cfg(feature = "math")]
 mod math;
+#[cfg(feature = "mermaid")]
+mod mermaid;
 mod pager;
 mod render;
 mod safe;

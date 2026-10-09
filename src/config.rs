@@ -24,6 +24,24 @@ pub struct Config {
     pub styles: Styles<StyleSpec>,
     pub glyphs: Glyphs,
     pub keys: Keys,
+    pub renderers: BTreeMap<String, Command>,
+}
+
+/// A program and its arguments: one string split on whitespace, or a list.
+#[derive(Deserialize, Clone, Debug, PartialEq)]
+#[serde(untagged, expecting = "a command string or a list of arguments")]
+pub enum Command {
+    Line(String),
+    Args(Vec<String>),
+}
+
+impl Command {
+    pub fn argv(self) -> Vec<String> {
+        match self {
+            Command::Line(line) => line.split_whitespace().map(str::to_owned).collect(),
+            Command::Args(args) => args,
+        }
+    }
 }
 
 #[derive(Deserialize, Clone)]
@@ -41,6 +59,7 @@ pub struct Layout {
     pub status_bar: bool,
     pub math: bool,
     pub diagrams: bool,
+    pub renderer_timeout: u64,
     pub watch: bool,
 }
 

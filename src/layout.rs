@@ -8,11 +8,14 @@ use pulldown_cmark::{
 };
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+use crate::blocks::{self, Context};
 use crate::config::Styles;
 use crate::doc::{Document, Task};
 use crate::highlight::{self, Span, Token};
+#[cfg(feature = "math")]
+use crate::math;
 use crate::theme::{Style, Theme};
-use crate::{diagram, links, math, table, wrap};
+use crate::{links, table, wrap};
 
 const OPTIONS: Options = Options::ENABLE_TABLES
     .union(Options::ENABLE_STRIKETHROUGH)
@@ -22,15 +25,18 @@ const OPTIONS: Options = Options::ENABLE_TABLES
 /// Columns kept of a scrollable line; the rest is dropped.
 const MAX_WIDE: usize = 4096;
 
+/// Work that outlives a layout: highlighted and rendered blocks, so re-layouts only redo
+/// what changed.
+#[derive(Default)]
+pub struct Cache {
+    syntax: highlight::Cache,
+    blocks: blocks::Cache,
+}
+
 /// Lays `src` out into `doc` at `width` columns.
-pub fn build(
-    doc: &mut Document,
-    syntax: &mut highlight::Cache,
-    src: &str,
-    width: usize,
-    theme: &Theme,
-) {
-    Builder::new(doc, syntax, theme, width).run(src);
+pub fn build(doc: &mut Document, cache: &mut Cache, src: &str, width: usize, theme: &Theme) {
+    Builder::new(doc, cache, theme, width).run(src);
+    cache.syntax.truncate(doc.code_blocks.len());
 }
 
 /// Inline scratch: text plus style runs with absolute offsets, reused between blocks.
@@ -269,8 +275,8 @@ struct Builder<'a, 'd> {
     slug: String,
     slug_counts: HashMap<String, u32>,
     breaks: Vec<u32>,
-    syntax: &'d mut highlight::Cache,
-    norm: String, // code or math lines with tabs expanded and controls replaced
+    cache: &'d mut Cache,
+    norm: String, // the open code block with tabs expanded and controls replaced
     num: String,
     natural: Vec<usize>,
     widths: Vec<usize>,
@@ -279,12 +285,7 @@ struct Builder<'a, 'd> {
 }
 
 impl<'a, 'd> Builder<'a, 'd> {
-    fn new(
-        doc: &'d mut Document,
-        syntax: &'d mut highlight::Cache,
-        theme: &'a Theme,
-        width: usize,
-    ) -> Self {
+    fn new(doc: &'d mut Document, cache: &'d mut Cache, theme: &'a Theme, width: usize) -> Self {
         Builder {
             out: Out {
                 doc,
@@ -311,7 +312,7 @@ impl<'a, 'd> Builder<'a, 'd> {
             slug: String::new(),
             slug_counts: HashMap::new(),
             breaks: Vec::new(),
-            syntax,
+            cache,
             norm: String::new(),
             num: String::new(),
             natural: Vec::new(),
@@ -323,7 +324,10 @@ impl<'a, 'd> Builder<'a, 'd> {
 
     fn run(mut self, src: &str) {
         let mut options = OPTIONS;
-        options.set(Options::ENABLE_MATH, self.theme.layout.math);
+        options.set(
+            Options::ENABLE_MATH,
+            cfg!(feature = "math") && self.theme.layout.math,
+        );
         let mut events = Events::new(src, options);
         while let Some((event, range)) = events.next() {
             self.at = range.start;
@@ -346,10 +350,12 @@ impl<'a, 'd> Builder<'a, 'd> {
                     self.inline.push_clean(&t, style);
                     self.inline.push(" ", style);
                 }
+                #[cfg(feature = "math")]
                 Event::InlineMath(tex) => {
                     let style = self.cur().over(self.theme.styles.math);
                     self.inline.push_clean(&math::inline(&tex), style);
                 }
+                #[cfg(feature = "math")]
                 Event::DisplayMath(tex) => self.display_math(&tex),
                 Event::SoftBreak | Event::HardBreak if self.inline.text.is_empty() => {}
                 Event::SoftBreak => self.inline.push(" ", self.cur()),
@@ -713,6 +719,7 @@ impl<'a, 'd> Builder<'a, 'd> {
 
     /// A centered block between the lines of its paragraph; inline in headings and tables,
     /// which can't be split.
+    #[cfg(feature = "math")]
     fn display_math(&mut self, tex: &str) {
         let style = self.cur().over(self.theme.styles.math);
         if self.heading.is_some() || self.table.is_some() {
@@ -730,28 +737,49 @@ impl<'a, 'd> Builder<'a, 'd> {
         self.gap = true;
     }
 
-    /// Draws a ```mermaid block as a diagram; false when it can't be rendered.
-    fn diagram(&mut self) -> bool {
-        let code = std::mem::take(&mut self.code);
-        let body = code.strip_suffix('\n').unwrap_or(&code);
-        let Some(lines) = diagram::render(body, self.out.avail(), !self.theme.layout.icons) else {
-            self.code = code;
+    /// Draws a fenced block through the renderer for its language, instead of a code box.
+    /// False when there is none, rendering is off, or the renderer fails.
+    fn rendered_block(&mut self) -> bool {
+        let theme = self.theme;
+        if !theme.layout.diagrams {
+            return false;
+        }
+        let Some(renderer) = theme.renderers.get(&self.lang) else {
             return false;
         };
-        let s = &self.theme.styles;
-        let first = self.out.line();
-        self.centered_block(&lines, s.diagram, Some(s.diagram_border));
-        let last = self.out.line() - 1;
-        self.out.doc.push_code(body, first, last);
+        let mut code = std::mem::take(&mut self.code);
+        let body = code.strip_suffix('\n').unwrap_or(&code);
+        let lang = self.lang.to_ascii_lowercase();
+        let cx = Context {
+            lang: &lang,
+            width: self.out.avail(),
+            ascii: !theme.layout.icons,
+        };
+        let lines = self.cache.blocks.render(renderer, body, &cx);
+        if let Some(lines) = &lines {
+            let first = self.out.line();
+            let styles = &theme.styles;
+            self.centered_block(lines, styles.diagram, Some(styles.diagram_border));
+            self.out.doc.push_code(body, first, self.out.line() - 1);
+            code.clear();
+            self.in_code = false;
+        }
         self.code = code;
-        self.code.clear();
-        self.in_code = false;
-        true
+        lines.is_some()
     }
 
     /// Lines centered as one block, or a scrollable wide block when they don't fit.
     /// With `line_style`, diagram lines and arrows get it instead of `style`.
     fn centered_block(&mut self, lines: &[String], style: Style, line_style: Option<Style>) {
+        let tab = self.theme.layout.tab_width;
+        let lines: Vec<String> = lines
+            .iter()
+            .map(|line| {
+                let mut clean = String::new();
+                normalize(line, tab, &mut clean);
+                clean
+            })
+            .collect();
         let avail = self.out.avail();
         let width = lines
             .iter()
@@ -761,19 +789,17 @@ impl<'a, 'd> Builder<'a, 'd> {
             .min(MAX_WIDE);
         let wide = width > avail;
         let first = self.out.line();
-        for line in lines {
-            self.norm.clear();
-            normalize(line, self.theme.layout.tab_width, &mut self.norm);
-            let (cut, used) = wrap::fit(&self.norm, width);
+        for line in &lines {
+            let (cut, used) = wrap::fit(line, width);
             self.out.begin_line();
             if wide {
                 let start = self.out.doc.col();
-                push_styled(self.out.doc, &self.norm[..cut], style, line_style);
+                push_styled(self.out.doc, &line[..cut], style, line_style);
                 self.out.doc.pad(width - used, Style::default());
                 self.out.doc.mark_window(start, self.out.doc.col());
             } else {
                 self.out.doc.pad((avail - width) / 2, Style::default());
-                push_styled(self.out.doc, &self.norm[..cut], style, line_style);
+                push_styled(self.out.doc, &line[..cut], style, line_style);
             }
             self.out.end_line();
         }
@@ -793,8 +819,7 @@ impl<'a, 'd> Builder<'a, 'd> {
     }
 
     fn code_block(&mut self) {
-        if self.theme.layout.diagrams && self.lang.eq_ignore_ascii_case("mermaid") && self.diagram()
-        {
+        if self.rendered_block() {
             return;
         }
         let Builder {
@@ -804,7 +829,7 @@ impl<'a, 'd> Builder<'a, 'd> {
             lang,
             norm,
             num,
-            syntax,
+            cache,
             in_code,
             ..
         } = self;
@@ -861,7 +886,7 @@ impl<'a, 'd> Builder<'a, 'd> {
             }
             normalize(raw, layout.tab_width, norm);
         }
-        let highlighted = syntax.block(out.doc.code_blocks.len(), lang, norm);
+        let highlighted = cache.syntax.block(out.doc.code_blocks.len(), lang, norm);
         let natural = norm
             .lines()
             .map(|l| l.width())
@@ -1023,10 +1048,10 @@ fn push_styled(doc: &mut Document, text: &str, style: Style, line_style: Option<
     let mut start = 0;
     let mut chars = text.char_indices().peekable();
     while let Some((_, c)) = chars.next() {
-        let line = diagram::is_line(c);
+        let line = blocks::is_line(c);
         if chars
             .peek()
-            .is_none_or(|&(_, n)| diagram::is_line(n) != line)
+            .is_none_or(|&(_, n)| blocks::is_line(n) != line)
         {
             let end = chars.peek().map_or(text.len(), |&(j, _)| j);
             doc.push(&text[start..end], if line { line_style } else { style });
@@ -1261,6 +1286,7 @@ mod tests {
         assert_eq!(style_of(&doc, 0, "WARNING").fg, t.styles.alert_warning.fg);
     }
 
+    #[cfg(feature = "math")]
     #[test]
     fn inline_math() {
         let doc = layout("Area $\\pi r^2$ here", 80);
@@ -1268,6 +1294,7 @@ mod tests {
         assert_eq!(style_of(&doc, 0, "π r²").fg, test_theme().styles.math.fg);
     }
 
+    #[cfg(feature = "math")]
     #[test]
     fn display_math_is_a_centered_block() {
         let doc = layout("before\n$$x^2$$\nafter", 20);
@@ -1276,6 +1303,7 @@ mod tests {
         assert_eq!(plain(&doc), "  ⎛ a   b ⎞\n  ⎝ c   d ⎠");
     }
 
+    #[cfg(feature = "math")]
     #[test]
     fn multi_line_math_is_centered_as_a_block() {
         let doc = layout(
@@ -1289,16 +1317,37 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "math")]
     #[test]
     fn text_after_display_math_has_no_leading_space() {
         let doc = layout("- item $$x^2$$ after", 40);
         assert!(plain(&doc).ends_with("\n  after"));
     }
 
+    #[cfg(feature = "math")]
     #[test]
     fn display_math_stays_inline_in_tables() {
         let doc = layout("| a |\n|---|\n| $$x^2$$ |", 20);
         assert!(plain(&doc).contains("│ x² │"));
+    }
+
+    #[cfg(not(feature = "math"))]
+    #[test]
+    fn math_without_the_feature_stays_text() {
+        assert_eq!(plain(&layout("$x^2$ and $$y$$", 80)), "$x^2$ and $$y$$");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn renderer_output_tabs_are_expanded() {
+        let mut cfg = crate::config::defaults();
+        cfg.renderers.insert(
+            "tabs".into(),
+            crate::config::Command::Args(vec!["printf".into(), "a\tb\tEND".into()]),
+        );
+        let mut doc = Document::new();
+        doc.layout("```tabs\nx\n```", 40, &Theme::new(cfg).unwrap());
+        assert!(plain(&doc).contains("END"));
     }
 
     #[test]
@@ -1316,6 +1365,7 @@ mod tests {
         assert_eq!(plain(&doc), "$x^2$ and $$y$$");
     }
 
+    #[cfg(feature = "mermaid")]
     #[test]
     fn mermaid_blocks_become_diagrams() {
         let src = "```mermaid\ngraph LR\n  A[Start] --> B[End]\n```";
@@ -1329,6 +1379,27 @@ mod tests {
         let t = test_theme();
         assert_eq!(style_of(&doc, row, "Start").fg, t.styles.diagram.fg);
         assert_eq!(style_of(&doc, row, "│").fg, t.styles.diagram_border.fg);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn configured_renderers_draw_blocks() {
+        let theme = |diagrams: bool, command: &str| {
+            let mut cfg = crate::config::defaults();
+            cfg.layout.diagrams = diagrams;
+            cfg.renderers
+                .insert("shout".into(), crate::config::Command::Line(command.into()));
+            Theme::new(cfg).unwrap()
+        };
+        let src = "```shout\nhello\n```";
+        let mut doc = Document::new();
+        doc.layout(src, 40, &theme(true, "tr a-z A-Z"));
+        assert!(plain(&doc).contains("HELLO") && !plain(&doc).contains("hello"));
+        assert_eq!(doc.code(0), "hello");
+        doc.layout(src, 40, &theme(false, "tr a-z A-Z"));
+        assert!(plain(&doc).contains("│ 1  hello"));
+        doc.layout(src, 40, &theme(true, "false"));
+        assert!(plain(&doc).contains("│ 1  hello"));
     }
 
     #[test]
@@ -1346,6 +1417,7 @@ mod tests {
         assert!(plain(&off).contains("graph LR"));
     }
 
+    #[cfg(feature = "mermaid")]
     #[test]
     fn wide_diagrams_scroll() {
         let src = "```mermaid\ngraph LR\n  A[First step] --> B[Second step] --> C[Third step] --> D[Fourth step]\n```";
@@ -1412,6 +1484,7 @@ mod tests {
         assert!(doc.wides.is_empty());
     }
 
+    #[cfg(feature = "math")]
     #[test]
     fn wide_display_math_scrolls() {
         let doc = layout("$$a + b + c + d + e + f + g + h + i + j$$", 12);

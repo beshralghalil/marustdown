@@ -54,9 +54,10 @@ A theme file holds a `[colors]` table and may override any other table.
 | `color` | `true` | `false` turns colors off; the cursor line is then shown in reverse video |
 | `icons` | `true` | `false` switches to ASCII glyphs |
 | `status_bar` | `true` | Show the status bar |
-| `math` | `true` | Render `$…$` and `$$…$$` LaTeX as Unicode; `false` shows the source |
+| `math` | `true` | Render `$…$` and `$$…$$` LaTeX as Unicode; `false` shows the source (needs the `math` feature) |
 | `watch` | `false` | Reload the file when it changes on disk; `--watch` / `--no-watch` override it |
-| `diagrams` | `true` | Draw ```` ```mermaid ```` blocks as diagrams; `false` shows the source |
+| `diagrams` | `true` | Draw ```` ```mermaid ```` and [`[renderers]`](#renderers) blocks; `false` shows their source |
+| `renderer_timeout` | `3000` | Milliseconds (1–60000) a `[renderers]` command may take before its block shows as code |
 
 ## `[colors]`
 
@@ -91,7 +92,7 @@ code = { fg = "orange", bg = "surface" }
 | `strong`, `emphasis`, `strike` | `**bold**`, `*italic*`, `~~strike~~` |
 | `code` | Inline code |
 | `math` | Inline and display math |
-| `diagram`, `diagram_border` | Mermaid diagram labels, and their boxes, lines and arrows |
+| `diagram`, `diagram_border` | Labels in Mermaid and `[renderers]` blocks, and their boxes, lines and arrows |
 | `link`, `link_icon` | Link text and the `↗` after it |
 | `image` | Image alt text |
 | `quote`, `quote_bar` | Blockquote text and bar |
@@ -100,7 +101,7 @@ code = { fg = "orange", bg = "surface" }
 | `task_done`, `task_todo` | Task boxes |
 | `rule` | Horizontal rules |
 | `code_block`, `code_border`, `code_label`, `line_number` | Code block background, box, language and copy label, line numbers |
-| `syntax_keyword`, `syntax_string`, `syntax_number`, `syntax_comment`, `syntax_type`, `syntax_function`, `syntax_constant`, `syntax_operator`, `syntax_tag`, `syntax_attribute`, `syntax_inserted`, `syntax_deleted` | Highlighted code tokens |
+| `syntax_keyword`, `syntax_string`, `syntax_number`, `syntax_comment`, `syntax_type`, `syntax_function`, `syntax_constant`, `syntax_operator`, `syntax_tag`, `syntax_attribute`, `syntax_inserted`, `syntax_deleted` | Highlighted code tokens (needs the `highlight` feature) |
 | `table_border`, `table_header` | Table borders and header row |
 | `cursor` | Cursor line |
 | `status` | Status bar |
@@ -133,6 +134,27 @@ ASCII set; glyphs you set yourself still apply on top of it.
 | `alert_note` … `alert_caution` | Nerd Font icon + `NOTE` … | Alert titles |
 | `breadcrumb` | `" › "` | Between headings in the status bar |
 | `separator` | `" │ "` | Between status bar sections |
+
+## `[renderers]`
+
+Programs that draw fenced code blocks, by fence language:
+
+```toml
+[renderers]
+dot = "graph-easy --as=boxart"
+plantuml = ["env", "PLANTUML_SECURITY_PROFILE=SANDBOX", "plantuml", "-tutxt", "-pipe"]
+```
+
+- The block's source goes to the program's stdin, and its output replaces the code box.
+- A command is a string split on spaces, or a list of arguments. No shell is used.
+- The program gets `MAR_LANG` (lowercase), `MAR_WIDTH` (columns available) and `MAR_ASCII` (`1` with icons off).
+- The output is shown as plain text in the `diagram` and `diagram_border` styles.
+- If the program fails, prints nothing or runs past `renderer_timeout`, the code is shown,
+  and the program and anything it started are stopped.
+- Results are cached: a block runs again only when its source or the width changes.
+- A renderer for `mermaid` replaces the built-in one.
+- Renderers also run on documents you didn't write, so only configure programs that are safe
+  on untrusted input. PlantUML's sandbox profile above, for example, blocks file and URL includes.
 
 ## `[keys]`
 

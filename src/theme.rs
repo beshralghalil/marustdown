@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
+use std::time::Duration;
 
+use crate::blocks::Registry;
 use crate::config::{ColorValue, Config, Glyphs, Keys, Layout, StyleSpec, Styles};
 
 pub type Color = u8; // index into Theme::palette; 0 = terminal default
@@ -43,6 +45,7 @@ pub struct Theme {
     pub glyphs: Glyphs,
     pub layout: Layout,
     pub keys: Keys,
+    pub renderers: Registry,
 }
 
 impl Theme {
@@ -58,12 +61,14 @@ impl Theme {
         if !cfg.layout.color {
             paints.clear();
         }
+        let timeout = Duration::from_millis(cfg.layout.renderer_timeout);
         Ok(Theme {
             palette: paints,
             styles,
             glyphs: cfg.glyphs,
             layout: cfg.layout,
             keys: cfg.keys,
+            renderers: Registry::new(cfg.renderers, timeout)?,
         })
     }
 
@@ -85,6 +90,9 @@ fn validate(cfg: &Config) -> Result<(), String> {
     let l = &cfg.layout;
     if !(1..=16).contains(&l.tab_width) {
         return Err("layout.tab_width: must be between 1 and 16".into());
+    }
+    if !(1..=60_000).contains(&l.renderer_timeout) {
+        return Err("layout.renderer_timeout: must be between 1 and 60000 milliseconds".into());
     }
     if l.scroll_duration > 1000 {
         return Err("layout.scroll_duration: at most 1000 milliseconds".into());

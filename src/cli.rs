@@ -20,11 +20,29 @@ Keys:
 Configuration: $XDG_CONFIG_HOME/marustdown/config.toml (usually ~/.config/marustdown/config.toml).
 Reference: https://github.com/beshralghalil/marustdown/blob/main/docs/configuration.md";
 
+/// Optional Cargo features, and whether this build has them.
+const FEATURES: [(&str, bool); 3] = [
+    ("highlight", cfg!(feature = "highlight")),
+    ("math", cfg!(feature = "math")),
+    ("mermaid", cfg!(feature = "mermaid")),
+];
+
+/// The version, followed by the optional features compiled in.
+fn version() -> String {
+    let features: Vec<&str> = FEATURES.iter().filter(|f| f.1).map(|f| f.0).collect();
+    let features = if features.is_empty() {
+        "no optional features".to_owned()
+    } else {
+        features.join(", ")
+    };
+    format!("{} ({features})", env!("CARGO_PKG_VERSION"))
+}
+
 /// A fast, configurable terminal markdown viewer.
 #[derive(Parser)]
 #[command(
     name = "mar",
-    version,
+    version = version(),
     long_about = "Render GitHub-flavored markdown in a full-screen pager, with syntax-highlighted \
                   code, task lists you can check off, keyboard link following and an outline. \
                   When stdout isn't a terminal, the rendered document is printed instead.",
@@ -113,6 +131,13 @@ mod tests {
             generate(shell, &mut Args::command(), "mar", &mut out);
             check(&format!("assets/completions/{file}"), &out);
         }
+    }
+
+    #[test]
+    fn version_lists_features() {
+        let version = version();
+        assert!(version.starts_with(env!("CARGO_PKG_VERSION")));
+        assert_eq!(version.contains("mermaid"), cfg!(feature = "mermaid"));
     }
 
     #[test]
